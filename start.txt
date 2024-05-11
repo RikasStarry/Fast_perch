@@ -1,0 +1,2 @@
+roslaunch start_file iris.launch
+roslaunch px4ctrl run_node.launch & sleep 10;

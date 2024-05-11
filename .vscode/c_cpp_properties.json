@@ -1,0 +1,25 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/usr/include/**",
+                "/opt/ros/noetic/include/**",
+                "/home/gnij/Fast-Perching-master/src/plan_manager/include/**",
+                "${workspaceFolder}/src/vis_utils/include",
+                "/opt/ros/noetic/include",
+                "${workspaceFolder}/src/traj_opt/include",
+                "/usr/include/pcl-1.10",
+                "${workspaceFolder}/devel/include",
+                "${workspaceFolder}/src/uneven_map/include"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c11",
+            "cppStandard": "c++14",
+            "intelliSenseMode": "gcc-x64"
+        }
+    ],
+    "version": 4
+}

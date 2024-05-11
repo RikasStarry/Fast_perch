@@ -1,0 +1,4 @@
+#roslaunch px4 fast_racing.launch & sleep 20;
+roslaunch plan_manager perching.launch & sleep 10;
+roslaunch px4ctrl run_node.launch & sleep 10;
+rosrun rqt_reconfigure rqt_reconfigure & sleep 10;

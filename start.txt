@@ -1,2 +1,12 @@
 roslaunch start_file iris.launch
 roslaunch px4ctrl run_node.launch & sleep 10;
+
+
+启动perch流程
+{
+启动rotors：
+roslaunch rotors_gazebo perch.launch
+启动fast-perch：
+roslaunch plan_manager perching.launch 2>/dev/null
+}
+rosrun plotjuggler plotjuggler

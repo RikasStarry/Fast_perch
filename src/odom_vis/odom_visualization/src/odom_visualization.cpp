@@ -53,8 +53,8 @@ void odom_callback(const nav_msgs::Odometry::ConstPtr& msg) {
   vel(2) = msg->twist.twist.linear.z;
 
   // NOTE fov
-  Eigen::Vector3d fov_p(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z);
-  Eigen::Quaterniond fov_q(msg->pose.pose.orientation.w, msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
+  //Eigen::Vector3d fov_p(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z);
+  //Eigen::Quaterniond fov_q(msg->pose.pose.orientation.w, msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
 
   if (origin && !isOriginSet) {
     isOriginSet = true;
@@ -188,7 +188,7 @@ int main(int argc, char** argv) {
   ros::NodeHandle n("~");
 
   // n.param("mesh_resource", mesh_resource, std::string("package://odom_visualization/meshes/hummingbird.mesh"));
-  n.param("mesh_resource", mesh_resource, std::string("package://odom_visualization/meshes/f250.dae"));
+  n.param("mesh_resource", mesh_resource, std::string("package://odom_visualization/meshes/flymesh.dae"));
 
   n.param("origin", origin, false);
   n.param("robot_scale", scale, 2.0);

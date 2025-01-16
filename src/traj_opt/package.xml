@@ -12,5 +12,6 @@
   <depend>roscpp</depend>
   <depend>mapping</depend>
   <depend>vis_utils</depend>
+  <depend>occ_grid</depend>
 
 </package>

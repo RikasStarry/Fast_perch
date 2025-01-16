@@ -48,12 +48,13 @@ namespace env
     double getResolution() { return resolution_; }
     Eigen::Vector3d getOrigin() { return origin_; }
     Eigen::Vector3d getMapSize() { return map_size_; };
+    //对膨胀地图判断
     bool isStateValid(const Eigen::Vector3d &pos) const
     {
       Eigen::Vector3i idx = posToIndex(pos);
       if (!isInMap(idx))
         return false;
-      return (occupancy_buffer_[idxToAddress(idx)] == false);
+      return (occupancy_buffer_inflate_[idxToAddress(idx)] == false);
     };
     bool isSegmentValid(const Eigen::Vector3d &p0, const Eigen::Vector3d &p1, double max_dist = DBL_MAX) const
     {
@@ -85,6 +86,11 @@ namespace env
     typedef shared_ptr<OccMap> Ptr;
 
   private:
+    double obstacles_inflation_;
+    std::vector<bool> occupancy_buffer_inflate_;
+    int inf_step;
+    int inf_step_z;   
+
     std::vector<bool> occupancy_buffer_;
 
     // map property
@@ -107,14 +113,19 @@ namespace env
     ros::NodeHandle node_;
     ros::Subscriber global_cloud_sub_;
     ros::Timer global_occ_vis_timer_;
+    ros::Timer global_inf_occ_vis_timer_;
     ros::Publisher glb_occ_pub_;
+    ros::Publisher glb_occ_inf_pub_;
 
     void setOccupancy(const Eigen::Vector3d &pos);
+    inline void setInflateOccupancy(const Eigen::Vector3d &pos);
     void globalOccVisCallback(const ros::TimerEvent &e);
+    void globalInfOccVisCallback(const ros::TimerEvent &e);
     void globalCloudCallback(const sensor_msgs::PointCloud2ConstPtr &msg);
 
     pcl::PointCloud<pcl::PointXYZ>::Ptr glb_cloud_ptr_;
-    bool is_global_map_valid_;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr glb_inf_cloud_ptr_;
+    bool is_global_map_valid_,is_global_inf_map_valid_;
   };
 
   inline int OccMap::idxToAddress(const int &x_id, const int &y_id, const int &z_id) const

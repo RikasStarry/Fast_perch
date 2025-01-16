@@ -1,0 +1,4 @@
+
+<launch>
+    <node pkg="sub_topic" type="sub_node" name="sub_node" output="screen" />
+</launch>

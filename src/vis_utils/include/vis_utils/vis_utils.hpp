@@ -169,6 +169,7 @@ class VisUtils {
       tmpPose.pose.position.z = pt[2];
       path_msg.poses.push_back(tmpPose);
     }
+
     path_msg.header.frame_id = "world";
     path_msg.header.stamp = ros::Time::now();
     publisher_map_[topic].publish(path_msg);
@@ -193,7 +194,7 @@ class VisUtils {
     setMarkerColor(marker, color, a);
     visualization_msgs::MarkerArray marker_array;
     marker_array.markers.reserve(balls.size() + 1);
-    marker.action = visualization_msgs::Marker::DELETEALL;
+    marker.action = visualization_msgs::Marker::ADD;
     marker_array.markers.push_back(marker);
     marker.action = visualization_msgs::Marker::ADD;
     for (const auto& ball : balls) {
@@ -225,7 +226,7 @@ class VisUtils {
     setMarkerColor(marker, color, a);
     visualization_msgs::MarkerArray marker_array;
     marker_array.markers.reserve(ellipsoids.size() + 1);
-    marker.action = visualization_msgs::Marker::DELETEALL;
+    marker.action = visualization_msgs::Marker::ADD;
     marker_array.markers.push_back(marker);
     marker.action = visualization_msgs::Marker::ADD;
     for (const auto& e : ellipsoids) {
@@ -343,7 +344,7 @@ class VisUtils {
       publisher_map_[topic] = pub;
     }
     visualization_msgs::Marker clear_previous_msg;
-    clear_previous_msg.action = visualization_msgs::Marker::DELETEALL;
+    clear_previous_msg.action = visualization_msgs::Marker::ADD;
     visualization_msgs::Marker arrow_msg;
     arrow_msg.type = visualization_msgs::Marker::ARROW;
     arrow_msg.action = visualization_msgs::Marker::ADD;
@@ -395,7 +396,7 @@ class VisUtils {
       publisher_map_[topic] = pub;
     }
     visualization_msgs::Marker clear_previous_msg;
-    clear_previous_msg.action = visualization_msgs::Marker::DELETEALL;
+    clear_previous_msg.action = visualization_msgs::Marker::ADD;
     visualization_msgs::Marker path_msg;
     path_msg.type = visualization_msgs::Marker::LINE_STRIP;
     path_msg.action = visualization_msgs::Marker::ADD;
@@ -436,7 +437,7 @@ class VisUtils {
       publisher_map_[topic] = pub;
     }
     visualization_msgs::Marker clear_previous_msg;
-    clear_previous_msg.action = visualization_msgs::Marker::DELETEALL;
+    clear_previous_msg.action = visualization_msgs::Marker::ADD;
     visualization_msgs::Marker path_msg;
     path_msg.type = visualization_msgs::Marker::LINE_STRIP;
     path_msg.action = visualization_msgs::Marker::ADD;

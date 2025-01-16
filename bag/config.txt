@@ -1,0 +1,24 @@
+sim-perch1
+1:    <param name="vmax" value="1.5"/>
+      <param name="amax" value="3.0"/>
+      <param name="rhoV" value="20000.0"/>
+      <param name="rhoA" value="20000.0"/>
+      
+2:    <param name="vmax" value="2.0"/>
+      <param name="amax" value="4.0"/>
+      <param name="rhoV" value="100000.0"/>
+      <param name="rhoA" value="100000.0"/>
+      <param name="rhoT" value="50000.0"/>           √ 
+      
+3:    <param name="vmax" value="2.0"/>
+      <param name="amax" value="4.0"/>
+      <param name="rhoV" value="1000000.0"/>
+      <param name="rhoA" value="100000.0"/>
+      <param name="rhoT" value="50000.0"/>
+sim-union
+      <param name="vmax" value="2.0"/>
+      <param name="amax" value="4.0"/>
+      <param name="rhoV" value="100000.0"/>
+      <param name="rhoA" value="100000.0"/>
+      <param name="rhoT" value="10000.0"/>
+

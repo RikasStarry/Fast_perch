@@ -151,7 +151,7 @@ std::pair<double, double> calculate_yaw(double t_cur, Eigen::Vector3d &pos, doub
                             ? traj_->getPos(t_cur + time_forward_) - pos \
                             : traj_->getPos(traj_duration_) - pos;
   double yaw_temp = dir.norm() > 0.0 ? atan2(dir(1), dir(0)) : last_yaw_;
-  std::cout<<"yaw_temp is :"<<yaw_temp<<std::endl;
+  //std::cout<<"yaw_temp is :"<<yaw_temp<<std::endl;
   double max_yaw_change = YAW_DOT_MAX_PER_SEC * dt;
   if (yaw_temp - last_yaw_ > PI)
   {
@@ -262,7 +262,7 @@ void publish_cmd(Vector3d p, Vector3d v, Vector3d a, Vector3d j, double y, doubl
   cmd.jerk.y = j(1);
   cmd.jerk.z = j(2);
   cmd.yaw = y;
-  std::cout<<"yaw is :"<<y<<std::endl;
+  //std::cout<<"yaw is :"<<y<<std::endl;
   cmd.yaw_dot = yd;
   pos_cmd_pub.publish(cmd);
 

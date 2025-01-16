@@ -1,6 +1,6 @@
 #include <traj_opt/traj_opt.h>
-
 #include <traj_opt/lbfgs_raw.hpp>
+
 
 namespace traj_opt {
 
@@ -19,6 +19,7 @@ static double thrust_middle_, thrust_half_;
 
 static double tictoc_innerloop_;
 static double tictoc_integral_;
+static bool bvp_valid = true;
 
 ros::Publisher midpt_pub;
 visualization_msgs::MarkerArray midpt_msg;
@@ -160,13 +161,91 @@ static inline double objectiveFunc(void* ptrObj,
 
   auto toc = std::chrono::steady_clock::now();
   tictoc_innerloop_ += (toc - tic).count();
-  // double cost_with_only_energy = cost;
-  // std::cout << "cost of energy: " << cost_with_only_energy << std::endl;
 
   tic = std::chrono::steady_clock::now();
   obj.addTimeIntPenalty(cost);
   toc = std::chrono::steady_clock::now();
   tictoc_integral_ += (toc - tic).count();
+  //自定义代价要放在calGrads_PT前面
+  if(bvp_valid)
+  {
+    gradP = obj.mincoOpt_.gdP;
+    cost += 5.0 * obj.rhoVt_*(P.col(obj.dim_p_-1)-mid_pos).squaredNorm();
+    gradP.col(obj.dim_p_-1) += 5.0 * obj.rhoVt_*2*(P.col(obj.dim_p_-1)-mid_pos);
+    std::cout << "The cost of midPt is :" << 5.0 * obj.rhoVt_*(P.col(obj.dim_p_-1)-mid_pos).squaredNorm() << std::endl;
+  }
+
+  double cost_teb = 0.0;
+  double rhoTeb = 0;//100000;
+
+  double s1 = obj.mincoOpt_.t(1);
+  double s2 = s1 * s1;
+  double s3 = s2 * s1;
+  double s4 = s2 * s2;
+  double s5 = s4 * s1;
+  double s6 = s4 * s2;
+  double s7 = s4 * s3;
+  Eigen::Matrix<double, 8, 1> beta0_xy;
+  beta0_xy << 1.0, s1, s2, s3, s4, s5, s6, s7;
+  Eigen::Matrix<double, 8, 1> beta1_xy;
+  beta1_xy << 0.0, 1.0, 2.0 * s1, 3.0 * s2, 4.0 * s3, 5.0 * s4, 6.0 * s5, 7.0 * s6;
+
+  Eigen::Vector3d xy_sqrt = obj.initS_.col(0) + P.col(1) - 2*P.col(0);
+  cost_teb += xy_sqrt.squaredNorm();
+
+  const Eigen::Matrix<double, 8, 3> &c_xy1 = obj.mincoOpt_.c.block<8, 3>(0, 0);
+  Eigen::Vector3d vel = c_xy1.transpose() * beta1_xy;
+  obj.mincoOpt_.gdC.block<8, 3>(0, 0) += beta0_xy * -4 * xy_sqrt.transpose();
+  obj.mincoOpt_.gdT += -4 * xy_sqrt.dot(vel) * 1.0;
+
+  const Eigen::Matrix<double, 8, 3> &c_xy2 = obj.mincoOpt_.c.block<8, 3>(1, 0);
+  vel = c_xy2.transpose() * beta1_xy;
+  obj.mincoOpt_.gdC.block<8, 3>(1, 0) += beta0_xy * 2 * xy_sqrt.transpose();
+  obj.mincoOpt_.gdT += 2 * xy_sqrt.dot(vel) * 1.0;
+
+
+  for(int i=0;i<P.cols()-3;++i)
+  {
+    xy_sqrt = (P.col(i) + P.col(i+2) - 2*P.col(i+1));
+    cost_teb += xy_sqrt.squaredNorm();
+
+    const Eigen::Matrix<double, 8, 3> &c_xyl = obj.mincoOpt_.c.block<8, 3>(i, 0);
+    vel = c_xyl.transpose() * beta1_xy;
+    obj.mincoOpt_.gdC.block<8, 3>(0, 0) += beta0_xy * 2 * xy_sqrt.transpose();
+    obj.mincoOpt_.gdT += 2 * xy_sqrt.dot(vel) * 1.0;
+
+    const Eigen::Matrix<double, 8, 3> &c_xymid = obj.mincoOpt_.c.block<8, 3>(i+1, 0);
+    vel = c_xymid.transpose() * beta1_xy;
+    obj.mincoOpt_.gdC.block<8, 3>(1, 0) += beta0_xy * -4 * xy_sqrt.transpose();
+    obj.mincoOpt_.gdT += -4 * xy_sqrt.dot(vel) * 1.0;
+
+    const Eigen::Matrix<double, 8, 3> &c_xyr = obj.mincoOpt_.c.block<8, 3>(i+2, 0);
+    vel = c_xyr.transpose() * beta1_xy;
+    obj.mincoOpt_.gdC.block<8, 3>(0, 0) += beta0_xy * 2 * xy_sqrt.transpose();
+    obj.mincoOpt_.gdT += 2 * xy_sqrt.dot(vel) * 1.0;
+  }
+
+  xy_sqrt = (P.col(P.cols()-2) + tailS.col(0) - 2*P.col(P.cols()-1));
+  cost_teb += xy_sqrt.squaredNorm();
+
+  const Eigen::Matrix<double, 8, 3> &c_xy3 = obj.mincoOpt_.c.block<8, 3>(8*(obj.N_-2), 0);
+  vel = c_xy3.transpose() * beta1_xy;
+  obj.mincoOpt_.gdC.block<8, 3>(0, 0) += beta0_xy * 2 * xy_sqrt.transpose();
+  obj.mincoOpt_.gdT += 2 * xy_sqrt.dot(vel) * 1.0;
+
+  const Eigen::Matrix<double, 8, 3> &c_xy4 = obj.mincoOpt_.c.block<8, 3>(8*(obj.N_-1), 0);
+  vel = c_xy4.transpose() * beta1_xy;
+  obj.mincoOpt_.gdC.block<8, 3>(1, 0) += beta0_xy * -4 * xy_sqrt.transpose();
+  obj.mincoOpt_.gdT += -4 * xy_sqrt.dot(vel) * 1.0;
+
+  cost_teb *= rhoTeb;
+  cost += cost_teb;
+  std::cout << "The cost of Teb is :" << cost_teb << std::endl;
+
+  // double cost_smooth = 0;
+  // obj.addSmoothPenalty(cost_smooth);
+  // std::cout << "The cost of Smooth is :" << cost_smooth << std::endl;
+  // cost += cost_smooth;
 
   tic = std::chrono::steady_clock::now();
   obj.mincoOpt_.calGrads_PT();
@@ -182,49 +261,29 @@ static inline double objectiveFunc(void* ptrObj,
   double grad_thrust = obj.mincoOpt_.gdTail.col(2).dot(tail_q_v_);//∂K/∂tao
   addLayerThrust(tail_f, grad_thrust, grad_f);//∂K/∂taof
   //tailV = land_v_ + vt.x() * v_t_x_ + vt.y() * v_t_y_
-  if (obj.rhoVt_ > -1) {
-    grad_vt.x() = grad_tailV.dot(v_t_x_);
-    grad_vt.y() = grad_tailV.dot(v_t_y_);
+  // if (obj.rhoVt_ > -1) {
+  //   grad_vt.x() = grad_tailV.dot(v_t_x_);
+  //   grad_vt.y() = grad_tailV.dot(v_t_y_);
 
-    double vt_norm = vt.norm();
-    cost += obj.rhoVt_ * pow((vt_norm - 0.3),2);
-    grad_vt += obj.rhoVt_ * 2 * (vt_norm - 0.3) * vt * 1/(vt_norm+0.000000001);
-    std::cout << "The cost of Vt.norm is :" << obj.rhoVt_ * pow((vt_norm - 0.3),2) << std::endl;
+  //   double vt_norm = vt.norm();
+  //   cost += obj.rhoVt_ * pow((vt_norm - 0.1),2);
+  //   grad_vt += obj.rhoVt_ * 2 * (vt_norm - 0.1) * vt * 1/(vt_norm+0.000000001);
+  //   std::cout << "The cost of Vt.norm is :" << obj.rhoVt_ * pow((vt_norm - 0.3),2) << std::endl;
 
-    Eigen::Vector3d vt_add = vt(0)*v_t_x_ + vt(1)*v_t_y_;
-    double xb_err = xb_.norm()*vt_add.norm()-xb_.dot(vt_add);
-    Eigen::Matrix<double, 2, 3> m_temp;
-    m_temp.row(0) = v_t_x_.transpose();
-    m_temp.row(1) = v_t_y_.transpose();
-    cost += 10.0 * obj.rhoVt_ * pow(xb_err,2);
-    grad_vt += 10.0 * obj.rhoVt_ * 2 * xb_err * (xb_.norm()* m_temp * vt_add/(vt_add.norm()+0.000000001) - m_temp * xb_);
-    std::cout << "The cost of Vt.direction is :" << 10.0 * obj.rhoVt_ * pow(xb_err,2) << std::endl;
-  }
+  //   Eigen::Vector3d vt_add = vt(0)*v_t_x_ + vt(1)*v_t_y_;
+  //   double xb_err = xb_.norm()*vt_add.norm()-xb_.dot(vt_add);
+  //   Eigen::Matrix<double, 2, 3> m_temp;
+  //   m_temp.row(0) = v_t_x_.transpose();
+  //   m_temp.row(1) = v_t_y_.transpose();
+  //   cost += 10.0 * obj.rhoVt_ * pow(xb_err,2);
+  //   grad_vt += 10.0 * obj.rhoVt_ * 2 * xb_err * (xb_.norm()* m_temp * vt_add/(vt_add.norm()+0.000000001) - m_temp * xb_);
+  //   std::cout << "The cost of Vt.direction is :" << 10.0 * obj.rhoVt_ * pow(xb_err,2) << std::endl;
+  // }
 
   obj.mincoOpt_.gdT += obj.rhoT_;//单段时间而非总时间
   cost += obj.rhoT_ * dT;
   gradt = obj.mincoOpt_.gdT * gdT2t(t);
   std::cout << "The cost of dT is :" << obj.rhoT_ * dT << std::endl;
-
-  gradP = obj.mincoOpt_.gdP;
-  cost += 5.0 * obj.rhoVt_*(P.col(obj.dim_p_-1)-mid_pos).squaredNorm();
-  gradP.col(obj.dim_p_-1) += 5.0 * obj.rhoVt_*2*(P.col(obj.dim_p_-1)-mid_pos);
-  std::cout << "The cost of midPt is :" << 5.0 * obj.rhoVt_*(P.col(obj.dim_p_-1)-mid_pos).squaredNorm() << std::endl;
-
-  double cost_teb = 0.0;
-  double rhoTeb = 10000;
-  cost_teb += rhoTeb*(obj.initS_.col(0) + P.col(1) - 2*P.col(0)).squaredNorm();
-  gradP.col(0) += rhoTeb*-4*(obj.initS_.col(0) + P.col(1) - 2*P.col(0));
-  gradP.col(1) += rhoTeb*2*(obj.initS_.col(0) + P.col(1) - 2*P.col(0));
-  for(int i=0;i<P.cols()-3;++i)
-  {
-    cost_teb += rhoTeb*(P.col(i) + P.col(i+2) - 2*P.col(i+1)).squaredNorm();
-    gradP.col(i) += rhoTeb*2*(P.col(i) + P.col(i+2) - 2*P.col(i+1));
-    gradP.col(i+1) += rhoTeb*-4*(P.col(i) + P.col(i+2) - 2*P.col(i+1));
-    gradP.col(i+2) += rhoTeb*2*(P.col(i) + P.col(i+2) - 2*P.col(i+1));
-  }
-  cost += cost_teb;
-  std::cout << "The cost of Teb is :" << cost_teb << std::endl;
 
   return cost;
 }
@@ -340,23 +399,23 @@ bool TrajOpt::generate_traj(const Eigen::MatrixXd& iniState,
                             const Eigen::Quaterniond& land_q,
                             const int& N,
                             Trajectory& traj,
-                            const double& t_replan) {
+                            const double& t_replan) {                
   N_ = N;
   dim_t_ = 1;
   dim_p_ = N_ - 1;
   x_ = new double[dim_t_ + 3 * dim_p_ + 1 + 2];  // 1: tail thrust; 2: tail vt
   double& t = x_[0];//不同于ueven，t是单段时间在全空间下的映射tao
-  Eigen::Map<Eigen::MatrixXd> P(x_ + dim_t_, 3, dim_p_);
+  Eigen::Map<Eigen::MatrixXd> P(x_ + dim_t_, 3, dim_p_);//3行n-1列
   double& tail_f = x_[dim_t_ + 3 * dim_p_];
   Eigen::Map<Eigen::Vector2d> vt(x_ + dim_t_ + 3 * dim_p_ + 1);
   car_p_ = car_p;
   car_v_ = car_v;
 
-  q2v(land_q, tail_q_v_);
+  q2v(land_q, tail_q_v_);//通过着陆点姿态四元数求z轴向量
   thrust_middle_ = (thrust_max_ + thrust_min_) / 2;
   thrust_half_ = (thrust_max_ - thrust_min_) / 2;
 
-  land_v_ = car_v - tail_q_v_ * v_plus_;
+  land_v_ = car_v - tail_q_v_ * v_plus_;//终点速度限制
   xb_ = land_q.toRotationMatrix().col(0);
   std::cout << "Vector xb_ is :" << xb_.transpose() << std::endl;
 
@@ -403,12 +462,12 @@ bool TrajOpt::generate_traj(const Eigen::MatrixXd& iniState,
   } else {//第一次采用obvp进行轨迹初始化，tailf和vt初始值为0，
     Eigen::MatrixXd bvp_i = initS_;
     Eigen::MatrixXd bvp_f(3, 4);
-    
-    double len_temp = (initS_.col(0) - car_p_).norm()/10.0;
-    if(len_temp >0.5)
+    double mid_pt_distance = 0.3;
+    double len_temp = (initS_.col(0) - car_p_).norm()/(N-1);
+    if(len_temp >mid_pt_distance)
     {
-      mid_pos.head(2) = car_p_.head(2)-sqrt(len_temp*len_temp-0.5*0.5)/xb_.head(2).norm()*xb_.head(2);
-      mid_pos.z() = car_p_.z() + 0.5;
+      mid_pos.head(2) = car_p_.head(2)-sqrt(len_temp*len_temp-mid_pt_distance*mid_pt_distance)/xb_.head(2).norm()*xb_.head(2);
+      mid_pos.z() = car_p_.z() + mid_pt_distance;
     }
     else
     {
@@ -422,59 +481,156 @@ bool TrajOpt::generate_traj(const Eigen::MatrixXd& iniState,
     bvp_f.col(3).setZero();
     double T_bvp = (bvp_f.col(0) - bvp_i.col(0)).norm() / vmax_ ;
     CoefficientMat coeffMat;
+    std::vector<double> durs{T_bvp};
+    std::vector<CoefficientMat> coeffs{coeffMat};
     double max_omega = 0;
     do {
       T_bvp += 1.0;
-      bvp_f.col(0) = mid_pos;//终点考虑栖息位置变化
+      //bvp_f.col(0) = mid_pos;//终点考虑栖息位置变化
       bvp(T_bvp, bvp_i, bvp_f, coeffMat);
-      std::vector<double> durs{T_bvp};
-      std::vector<CoefficientMat> coeffs{coeffMat};
+      durs[0] = T_bvp;
+      coeffs[0] = coeffMat;
       Trajectory traj(durs, coeffs);
       max_omega = getMaxOmega(traj);
     } while (max_omega > 1.5 * omega_max_);//??
-    Eigen::VectorXd tt(8);
-    tt(7) = 1.0;
-    for (int i = 1; i <(N_-1); ++i) {
-      double tt0 = (i * 1.0 / (N_-1)) * T_bvp;
-      for (int j = 6; j >= 0; j -= 1) {
-        tt(j) = tt(j + 1) * tt0;
+
+    //检验bvp
+    Trajectory traj_bvp(durs, coeffs);
+    
+    for(double ts=0;ts<traj_bvp.getTotalDuration();ts+=0.1)
+    {
+      auto ts_pos = traj_bvp.getPos(ts);
+      if(!env_ptr_->isStateValid(ts_pos))
+        bvp_valid=false;   
+    }
+    bvp_valid = false;
+    std::cout << "bvp valid is " << std::boolalpha << bvp_valid<< std::endl;
+    if(!bvp_valid)
+    {
+      Eigen::MatrixXd end_state(3, 4);
+      end_state.col(0) = car_p_;
+      end_state.col(1) = car_v_;
+      end_state.col(2) = forward_thrust(tail_f) * tail_q_v_ + g_;
+      end_state.col(3).setZero();
+      //尝试3
+      double total_time = snap_traj.getTotalDuration();
+      double tt0 = total_time / N ;
+      t = logC2(tt0 * 1.0);
+      int i=0;
+      Eigen::Vector3d pos_last = snap_traj.getPos(0.0);
+      Eigen::Vector3d pos_next = snap_traj.getPos(0.0);
+      double lenth_ = 0.0;
+      double seglen = snap_traj.getTrajLenth()/N;
+      for(double ts=0.1;ts<total_time;ts+=0.1)
+      {
+        pos_next = snap_traj.getPos(ts);
+        lenth_ += (pos_next-pos_last).norm();
+        pos_last = pos_next;
+        if(lenth_>seglen)
+        {
+          P.col(i) = pos_next;
+          i++;
+          lenth_ = 0.0;
+          if(i>=N-1)
+            break;
+        }
       }
-      P.col(i - 1) = coeffMat * tt;//中间点
-      midpt.id = i;
-      midpt.pose.position.x = P.col(i - 1).x(); 
-      midpt.pose.position.y = P.col(i - 1).y();
-      midpt.pose.position.z = P.col(i - 1).z();
+      mincoOpt_.generate(initS_,end_state,P,tt0);
+      std::cout << "end pt is " << mincoOpt_.getTraj().getPos(total_time)<< std::endl;
+      visPtr_->visualize_traj(mincoOpt_.getTraj(), "smooth_traj");
+      
+      // while(true)
+      // {
+      //   visPtr_->visualize_traj(mincoOpt_.getTraj(), "smooth_traj"); 
+      //   visPtr_->visualize_traj(snap_traj, "snap_traj");
+      //   sleep(1.0);
+      // }
+      
+      //尝试2 先对rrt节点按距离重新取点，优化初始轨迹震荡过大
+      // bvp_f.col(0) = init_path_.back();
+      // for (int i=0; i<inner_xy_node.size(); i++)
+      // {
+      //     P.col(i) = inner_xy_node[i];
+      // }
+      // double exp_t= total_time / N_;
+      // mincoOpt_.generate(initS_,bvp_f,P,exp_t);
+      // t = logC2(exp_t * 1.0);
+      // rrt_traj=mincoOpt_.getTraj();
+      // has_rrt_traj=true;
+      //尝试一 使用minco_temp直接优化rrt节点，结果参数不对
+      // Eigen::VectorXd tvec(N );
+      // Eigen::MatrixXd pmat(3, N - 1);
+      // for(int i=0;i<init_path_.size()-1;i++)
+      // { 
+      //   if(i<init_path_.size()-2)
+      //     pmat.col(i)=init_path_[i+1];
+      //   double seglen = (init_path_[i+1]-init_path_[i]).norm();
+      //   double thr = vmax_*vmax_/amax_;
+      //   if(seglen<thr)
+      //     tvec[i] = seglen/vmax_*1.5;//sqrt(seglen/amax_)
+      //   else
+      //     tvec[i] = 2*vmax_/amax_+(seglen-thr)/vmax_;
+      // }
+
+      // minco::MINCO_S4 minco_temp;
+      // minco_temp.reset(N_);
+      // minco_temp.generate(initS_,bvp_f,pmat,tvec);
+      // rrt_traj=minco_temp.getTraj();
+
+      // double total_t = rrt_traj.getTotalDuration();
+      // double tt0 = total_t / N_;
+      // t = logC2(tt0 * 1.0);//单段时间
+      // has_rrt_traj=true;
+
+      // for(int i=1;i< N_;i++)
+      // {
+      //   tt0 = 1.0 * i * tt0;
+      //   P.col(i - 1) = rrt_traj.getPos(tt0);
+
+      // }
+      //visPtr_->visualize_traj(rrt_traj, "RRT_traj");   
+    }
+    else
+    {
+      for (int i = 1; i <(N_-1); ++i) {
+        double tt0 = (i * 1.0 / (N_-1)) * T_bvp;
+        P.col(i - 1) = traj_bvp.getPos(tt0);
+        midpt.id = i;
+        midpt.pose.position.x = P.col(i - 1).x(); 
+        midpt.pose.position.y = P.col(i - 1).y();
+        midpt.pose.position.z = P.col(i - 1).z();
+        midpt.pose.orientation.x = 0;
+        midpt.pose.orientation.y = 0;
+        midpt.pose.orientation.y = 0;
+        midpt.pose.orientation.w = 1;
+        midpt_msg.markers.emplace_back(midpt);
+      }
+      P.col(N_- 2) = mid_pos;
+      t = logC2(T_bvp / (N_- 1) * 1.0);//单段时间
+
+      midpt.id = N_- 1;
+      midpt.pose.position.x = mid_pos.x(); 
+      midpt.pose.position.y = mid_pos.y();
+      midpt.pose.position.z = mid_pos.z();
       midpt.pose.orientation.x = 0;
       midpt.pose.orientation.y = 0;
       midpt.pose.orientation.y = 0;
       midpt.pose.orientation.w = 1;
       midpt_msg.markers.emplace_back(midpt);
+      midpt_pub.publish(midpt_msg);
     }
-    P.col(N_- 2) = mid_pos;
-    t = logC2(T_bvp / (N_- 1) * 1.0);//单段时间
   }
-  // std::cout << "initial guess >>> t: " << t << std::endl;
-  // std::cout << "initial guess >>> tail_f: " << tail_f << std::endl;
-  // std::cout << "initial guess >>> vt: " << vt.transpose() << std::endl;
-  midpt.id = N_- 1;
-  midpt.pose.position.x = mid_pos.x(); 
-  midpt.pose.position.y = mid_pos.y();
-  midpt.pose.position.z = mid_pos.z();
-  midpt.pose.orientation.x = 0;
-  midpt.pose.orientation.y = 0;
-  midpt.pose.orientation.y = 0;
-  midpt.pose.orientation.w = 1;
-  midpt_msg.markers.emplace_back(midpt);
-  midpt_pub.publish(midpt_msg);
+
   // NOTE optimization
   lbfgs::lbfgs_parameter_t lbfgs_params;
   lbfgs::lbfgs_load_default_parameters(&lbfgs_params);
-  lbfgs_params.mem_size = 32;
+  lbfgs_params.mem_size = 256;
   lbfgs_params.past = 3;
-  lbfgs_params.g_epsilon = 0.0;
-  lbfgs_params.min_step = 1e-16;
+  lbfgs_params.g_epsilon = 0;
+  lbfgs_params.min_step = 1e-32;
   lbfgs_params.delta = 1e-4;
-  lbfgs_params.line_search_type = 0;
+  //lbfgs_params.line_search_type = 0;
+  lbfgs_params.max_iterations=10000;
   double minObjective;
 
   int opt_ret = 0;
@@ -500,8 +656,25 @@ bool TrajOpt::generate_traj(const Eigen::MatrixXd& iniState,
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
   }
   if (opt_ret < 0) {
-    delete[] x_;
-    return false;
+    double dT = expC2(t);
+    double T = N_ * dT;
+    Eigen::Vector3d tailV;
+    forwardTailV(vt, tailV);
+    Eigen::MatrixXd tailS(3, 4);
+    tailS.col(0) = car_p_ + car_v_ * T + tail_q_v_ * robot_l_;
+    tailS.col(1) = tailV;
+    tailS.col(2) = forward_thrust(tail_f) * tail_q_v_ + g_;
+    tailS.col(3).setZero();
+    mincoOpt_.generate(initS_, tailS, P, dT);
+    //auto fail_traj = mincoOpt_.getTraj();
+    // while(true)
+    // {
+    //   visPtr_->visualize_traj(fail_traj,"fail_traj");
+    //   visPtr_->visualize_traj(mincoOpt_.getTraj(), "smooth_traj"); 
+    //   visPtr_->visualize_traj(snap_traj, "snap_traj");
+
+    //delete[] x_;
+    //return false;
   }
   double dT = expC2(t);
   double T = N_ * dT;
@@ -517,6 +690,55 @@ bool TrajOpt::generate_traj(const Eigen::MatrixXd& iniState,
   mincoOpt_.generate(initS_, tailS, P, dT);
   traj = mincoOpt_.getTraj();
 
+  visualization_msgs::MarkerArray traj_ellipsoids;
+  int ell_id = 0;
+  double len = 0;
+  Eigen::Vector3d pre = traj.getPos(0);
+  Eigen::Vector3d next = traj.getPos(0);
+  for(double ts=0;ts<traj.getTotalDuration()-0.01;ts+=0.01)
+  {
+    next = traj.getPos(ts);
+    len += (next-pre).norm();
+    if(len>0.15)
+    {
+      visualization_msgs::Marker ellipsoid;
+      ellipsoid.header.frame_id = "world";
+      ellipsoid.header.stamp = ros::Time::now();
+      ellipsoid.id = ell_id++; 
+      ellipsoid.type = visualization_msgs::Marker::SPHERE; 
+      ellipsoid.action = visualization_msgs::Marker::ADD;
+      ellipsoid.pose.position.x = next.x();
+      ellipsoid.pose.position.y = next.y();
+      ellipsoid.pose.position.z = next.z();
+      Eigen::Vector3d x_vec = (traj.getPos(ts+0.1)-next).normalized();
+      x_vec.normalize();
+      Eigen::Vector3d y_vec = Eigen::Vector3d(0, 0, 1).cross(x_vec);
+      y_vec.normalize();
+      Eigen::Vector3d z_vec = x_vec.cross(y_vec);
+      z_vec.normalize();
+      Eigen::Matrix3d R;
+      R.col(0) = x_vec;
+      R.col(1) = y_vec;
+      R.col(2) = z_vec;
+      Eigen::Quaterniond q(R);
+      ellipsoid.pose.orientation.w = q.w();
+      ellipsoid.pose.orientation.x = q.x();
+      ellipsoid.pose.orientation.y = q.y();
+      ellipsoid.pose.orientation.z = q.z();
+      ellipsoid.scale.x = 0.15; 
+      ellipsoid.scale.y = 0.4; 
+      ellipsoid.scale.z = 0.15; 
+      ellipsoid.color.a = 0.5; 
+      ellipsoid.color.r = 115.0/255.0;
+      ellipsoid.color.g = 62.0/255.0;
+      ellipsoid.color.b = 115.0/255.0;
+      traj_ellipsoids.markers.push_back(ellipsoid);
+      len = 0;
+    }
+    pre = next;
+  }
+  ellipsoid_pub.publish(traj_ellipsoids);
+  
   std::cout << "tailV: " << tailV.transpose() << std::endl;
   std::cout << "maxOmega: " << getMaxOmega(traj) << std::endl;
   std::cout << "maxThrust: " << traj.getMaxThrust() << std::endl;
@@ -525,6 +747,9 @@ bool TrajOpt::generate_traj(const Eigen::MatrixXd& iniState,
   std::cout << "total time: " << traj.getTotalDuration() << std::endl;
   std::cout << "total lenth: " << traj.getTrajLenth() << std::endl;
   std::cout << "endVel: " << traj.getVel(traj.getTotalDuration()) << std::endl;
+
+  std::cout << "finall traj len is " << traj.getTrajLenth()<< std::endl;
+  std::cout << "final traj time is " << traj.getTotalDuration()<< std::endl;
 
   init_traj_ = traj;
   init_tail_f_ = tail_f;
@@ -646,12 +871,13 @@ void TrajOpt::addTimeIntPenalty(double& cost) {
     }
     s1 += step;
   }
-  std::cout << "The cost of floor is :" << cost_floor << std::endl;
-  std::cout << "The cost of v is :" << cost_v << std::endl;
-  std::cout << "The cost of thrust is :" << cost_thrust << std::endl;
-  std::cout << "The cost of omega is :" << cost_omega << std::endl;
-  std::cout << "The cost of perchCollision is :" << cost_perchCollision << std::endl;
+  // std::cout << "The cost of floor is :" << cost_floor << std::endl;
+  // std::cout << "The cost of v is :" << cost_v << std::endl;
+  // std::cout << "The cost of thrust is :" << cost_thrust << std::endl;
+  // std::cout << "The cost of omega is :" << cost_omega << std::endl;
+  // std::cout << "The cost of perchCollision is :" << cost_perchCollision << std::endl;
 }
+
 
 TrajOpt::TrajOpt(ros::NodeHandle& nh) {
   // nh.getParam("N", N_);
@@ -663,7 +889,7 @@ TrajOpt::TrajOpt(ros::NodeHandle& nh) {
   nh.getParam("thrust_min", thrust_min_);
   nh.getParam("omega_max", omega_max_);
   nh.getParam("omega_yaw_max", omega_yaw_max_);
-  nh.getParam("v_plus", v_plus_);
+  nh.getParam("v_plus", v_plus_);//法向速度
   nh.getParam("robot_l", robot_l_);
   nh.getParam("robot_r", robot_r_);
   nh.getParam("platform_r", platform_r_);
@@ -677,9 +903,26 @@ TrajOpt::TrajOpt(ros::NodeHandle& nh) {
   nh.getParam("rhoPerchingCollision", rhoPerchingCollision_);
   nh.getParam("pause_debug", pause_debug_);
   visPtr_ = std::make_shared<vis_utils::VisUtils>(nh);
-
+  env_ptr_ = std::make_shared<env::OccMap>();
+  env_ptr_->init(nh);
+  path_sub = nh.subscribe<nav_msgs::Path>("rrt_star_final_path", 1, &TrajOpt::pathCallback,this);
   midpt_pub = nh.advertise<visualization_msgs::MarkerArray>("mid_pt", 1); 
+  ellipsoid_pub = nh.advertise<visualization_msgs::MarkerArray>("/traj_ellipsoid", 1); 
+}
+
+void TrajOpt::pathCallback(const nav_msgs::Path::ConstPtr& msg)
+{
   
+  geometry_msgs::PoseStamped tmpPose;
+  
+  for (int i=0;i<msg->poses.size();i++)
+  {
+    auto p=msg->poses[i].pose.position;
+    Eigen::Vector3d node(p.x,p.y,p.z);
+    init_path_.push_back(node);
+  }
+  init_path_bool=true;
+  //std::cout<<init_path_.size()<<std::endl;
 }
 
 bool TrajOpt::grad_cost_v(const Eigen::Vector3d& v,

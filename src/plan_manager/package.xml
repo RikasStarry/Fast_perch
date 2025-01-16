@@ -14,5 +14,7 @@
   <depend>traj_utils</depend>
   <build_depend>uneven_map</build_depend>
   <exec_depend>uneven_map</exec_depend>
+  <build_depend>path_finder</build_depend>
+  <exec_depend>path_finder</exec_depend>
 
 </package>

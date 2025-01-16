@@ -32,6 +32,11 @@
 
 using namespace std;
 
+static std::random_device rd;
+static std::mt19937 gen; 
+static std::normal_distribution<double> noise_x; 
+static std::normal_distribution<double> noise_y;
+static std::normal_distribution<double> noise_z;
 namespace uneven_planner
 {
     struct RXS2
@@ -70,9 +75,11 @@ namespace uneven_planner
         private:
             // params
             bool            show_zbso2;
+            bool            set_noise;
             int             iter_num;
             int             show_type;
             int             maxpt_size;
+            double          stddev;
             double          ellipsoid_x;
             double          ellipsoid_y;
             double          ellipsoid_z;
@@ -158,13 +165,17 @@ namespace uneven_planner
             inline void getTerrainWithGradz(const Eigen::Vector3d& pos, RXS2& value, Eigen::Matrix<double,1,3>& grad);
             
             inline double getGravity(void);
+            double getZ(const int address);
+            Eigen::Vector3d getZb(const int address);
             inline double getMass(void);
             inline double getTerrainSig(const Eigen::Vector3d& pos);
             inline void boundIndex(Eigen::Vector3i& id);
             inline void posToIndex(const Eigen::Vector3d& pos, Eigen::Vector3i& id);
             inline void indexToPos(const Eigen::Vector3i& id, Eigen::Vector3d& pos);
+            Eigen::Vector3i posToIndex(const Eigen::Vector3d& pos);
             inline int toAddress(const Eigen::Vector3i& id);
             inline int toAddress(const int& x, const int& y, const int& yaw);
+
             inline bool isInMap(const Eigen::Vector3d& pos);
             inline bool isInMap(const Eigen::Vector3i& idx);
             inline int isOccupancy(const Eigen::Vector3d& pos);
@@ -459,7 +470,16 @@ namespace uneven_planner
 
         return;
     }
-
+    Eigen::Vector3d UnevenMap::getZb(const int address)
+    {
+        Eigen::Vector3d res;
+        res<<map_buffer[address].zb.x(),map_buffer[address].zb.y(),map_buffer[address].getC();
+        return res;
+    }
+    double UnevenMap::getZ(const int address)
+    {
+        return map_buffer[address].z;
+    }
     inline double UnevenMap::getGravity(void)
     {
         return gravity;
@@ -489,6 +509,15 @@ namespace uneven_planner
             id(2) += voxel_num(2);
 
         return;
+    }
+
+    Eigen::Vector3i UnevenMap::posToIndex(const Eigen::Vector3d& pos)
+    {
+        Eigen::Vector3i id;
+        id(0) = floor((pos(0) - map_origin(0)) * xy_resolution_inv);
+        id(1) = floor((pos(1) - map_origin(1)) * xy_resolution_inv);
+        id(2) = floor((pos(2) - map_origin(2)) * yaw_resolution_inv);
+        return id;
     }
 
     inline void UnevenMap::posToIndex(const Eigen::Vector3d& pos, Eigen::Vector3i& id)
@@ -768,7 +797,21 @@ namespace uneven_planner
         world_cloud_collision->height = 1;
         world_cloud_collision->is_dense = true;
         world_cloud_collision->header.frame_id = "world";
-        pcl::toROSMsg(*world_cloud_collision, collision_cloud_msg);
-        
+
+        if(set_noise)
+        {
+            noise_x=std::normal_distribution<double>(0.0, stddev);
+            noise_y=std::normal_distribution<double>(0.0, stddev);
+            noise_z=std::normal_distribution<double>(0.0, stddev);
+
+            for (auto& point : *world_cloud_collision)
+            {
+                point.x += noise_x(gen);
+                point.y += noise_y(gen);
+                point.z += noise_z(gen);
+
+            }
+        }
+        pcl::toROSMsg(*world_cloud_collision, collision_cloud_msg);      
     }
 }

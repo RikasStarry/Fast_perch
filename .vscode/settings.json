@@ -63,7 +63,18 @@
     "hash_set": "cpp",
     "ctime": "cpp",
     "ratio": "cpp",
-    "cinttypes": "cpp"
+    "cinttypes": "cpp",
+    "fstream": "cpp",
+    "strstream": "cpp",
+    "condition_variable": "cpp",
+    "cwctype": "cpp",
+    "iomanip": "cpp",
+    "mutex": "cpp",
+    "numeric": "cpp",
+    "streambuf": "cpp",
+    "system_error": "cpp",
+    "variant": "cpp",
+    "*.ipp": "cpp"
   },
   "C_Cpp.intelliSenseEngine": "default"
 }

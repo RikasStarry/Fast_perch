@@ -7,7 +7,8 @@
 #include <traj_opt/traj_opt.h>
 #include <traj_opt/poly_traj_utils.hpp>
 #include <traj_utils/PolyTraj.h>
-#include <uneven_map/uneven_map.h>
+#include "uneven_map/uneven_map.h"
+#include "path_finder/TesterPathFinder.h"
 
 #include <Eigen/Core>
 #include <atomic>
@@ -20,9 +21,11 @@ class PlanManager
   ros::Subscriber target_sub,odom_sub;
   ros::Timer plan_timer_;
   ros::Publisher traj_pub,heartbeat_pub;
+  ros::Publisher goal_pub;
 
   std::shared_ptr<vis_utils::VisUtils> visPtr_;
   std::shared_ptr<traj_opt::TrajOpt> trajOptPtr_;
+  std::shared_ptr<PF::TesterPathFinder> pfPtr_;
   uneven_planner::UnevenMap::Ptr uneven_map;
 
   Eigen::Vector3d goal_;
@@ -53,6 +56,9 @@ class PlanManager
   void execFSMCallback(const ros::TimerEvent &e);
   void rcvOdomCallBack(const nav_msgs::Odometry::ConstPtr& msgPtr);
   void visTrajCallback(const ros::TimerEvent &e);
+  //第三次尝试
+  int Factorial(int x);
+  Eigen::VectorXd timeAllocation(const std::vector<Eigen::Vector3d>& Path);
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 };

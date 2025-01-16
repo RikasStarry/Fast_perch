@@ -1,6 +1,4 @@
 #include "uneven_map/uneven_map.h"
-
-
 namespace uneven_planner
 {
     int UnevenMap::lowlim = 0.0;
@@ -102,9 +100,11 @@ namespace uneven_planner
     void UnevenMap::init(ros::NodeHandle& nh)
     {
         nh.getParam("uneven_map/show_zbso2", show_zbso2);
+        nh.getParam("uneven_map/set_noise", set_noise);
         nh.getParam("uneven_map/iter_num", iter_num);
         nh.getParam("uneven_map/show_type", show_type);
         nh.getParam("uneven_map/maxpt_size", maxpt_size);
+        nh.getParam("uneven_map/stddev", stddev);
         nh.getParam("uneven_map/map_size_x", map_size[0]);
         nh.getParam("uneven_map/map_size_y", map_size[1]);
         nh.getParam("uneven_map/ellipsoid_x", ellipsoid_x);
@@ -169,6 +169,12 @@ namespace uneven_planner
         world_cloud_plane.reset(new pcl::PointCloud<pcl::PointXY>());
         world_cloud_collision.reset(new pcl::PointCloud<pcl::PointXYZ>());
 
+        static std::random_device rd;
+        static std::mt19937 gen(rd()); 
+        static std::normal_distribution<double> noise_x(0.0, stddev); 
+        static std::normal_distribution<double> noise_y(0.0, stddev);
+        static std::normal_distribution<double> noise_z(0.0, stddev);
+
         // world cloud process
         pcl::PointCloud<pcl::PointXYZ> cloudMapOrigin_collision;
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloudMapOrigin_ground;
@@ -183,7 +189,27 @@ namespace uneven_planner
         cloudMapOrigin_collision.height = 1;
         cloudMapOrigin_collision.is_dense = true;
         cloudMapOrigin_collision.header.frame_id = "world";
-        pcl::toROSMsg(cloudMapOrigin_collision, origin_cloud_msg);
+
+        if(set_noise)
+        {
+            //带噪声的origin
+            pcl::PointCloud<pcl::PointXYZ> cloudMapOrigin_collision_temp = cloudMapOrigin_collision;
+            cloudMapOrigin_collision_temp.header.frame_id = "world";
+            cloudMapOrigin_collision.width = cloudMapOrigin_collision.points.size();
+            cloudMapOrigin_collision.height = 1;
+            cloudMapOrigin_collision.is_dense = true;
+            for (auto& point : cloudMapOrigin_collision_temp)
+            {
+                point.x += noise_x(gen);
+                point.y += noise_y(gen);
+                point.z += noise_z(gen);
+            }
+            pcl::toROSMsg(cloudMapOrigin_collision_temp, origin_cloud_msg);
+        }
+        else
+        {
+            pcl::toROSMsg(cloudMapOrigin_collision, origin_cloud_msg);
+        }
         //点云切割
         pointSeg(cloudMapOrigin_collision.makeShared(),cloudMapOrigin_ground);
         cloudMapOrigin_collision.clear();
@@ -459,6 +485,15 @@ namespace uneven_planner
         grid_map_filtered.height = 1;
         grid_map_filtered.is_dense = true;
         grid_map_filtered.header.frame_id = "world";
+        if(set_noise)
+        {
+            for (auto& point : grid_map_filtered)
+            {
+                point.x += noise_x(gen);
+                point.y += noise_y(gen);
+                point.z += noise_z(gen);
+            }
+        }
         pcl::toROSMsg(grid_map_filtered, filtered_cloud_msg);
 
         if(show_zbso2)

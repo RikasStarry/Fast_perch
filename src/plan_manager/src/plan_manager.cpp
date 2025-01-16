@@ -1,4 +1,5 @@
 #include "/home/gnij/Fast-Perching-master/src/plan_manager/include/plan_manager.h"
+#include "traj_min_jerk.hpp"
 
 void PlanManager::rcvWpsCallBack(const geometry_msgs::PoseStampedConstPtr& msgPtr) {
   if(!uneven_map->mapReady())
@@ -12,6 +13,13 @@ void PlanManager::rcvWpsCallBack(const geometry_msgs::PoseStampedConstPtr& msgPt
   uneven_map->getTerrainPos(temp_pos,temp_m,goal_);
   goal_q = temp_m;
   target_recv = true;
+
+  geometry_msgs::Point goal_point;
+  goal_point.x=goal_[0];
+  goal_point.y=goal_[1];
+  goal_point.z=goal_[2];
+  goal_pub.publish(goal_point);
+  std::cout<<"goal is "<<goal_.transpose()<<std::endl;
 }
 
 void PlanManager::rcvOdomCallBack(const nav_msgs::Odometry::ConstPtr& msgPtr) {
@@ -29,6 +37,10 @@ void PlanManager::debug_timer_callback(const ros::TimerEvent& event) {
   if (!(target_recv && odom_recv)) {
     return;
   }
+  if(!(trajOptPtr_->init_path_bool&&trajOptPtr_->env_ptr_->mapValid()))
+  {
+    return;
+  } 
   Eigen::MatrixXd iniState;
   iniState.setZero(3, 4);
   bool generate_new_traj_success = false;
@@ -37,9 +49,12 @@ void PlanManager::debug_timer_callback(const ros::TimerEvent& event) {
   Eigen::Quaterniond land_q(1, 0, 0, 0);
 
   iniState.setZero();
-  iniState.col(0).x() = odom_pose.x();
-  iniState.col(0).y() = odom_pose.y();
-  iniState.col(0).z() = odom_pose.z();
+  // iniState.col(0).x() = odom_pose.x();
+  // iniState.col(0).y() = odom_pose.y();
+  // iniState.col(0).z() = odom_pose.z();
+  iniState.col(0).x() = -4.0;
+  iniState.col(0).y() = -4.0;
+  iniState.col(0).z() = 2.0;
   iniState.col(1) = odom_lin;//2,0,0
   target_p = goal_;
   target_v = Eigen::Vector3d::Zero();
@@ -53,24 +68,129 @@ void PlanManager::debug_timer_callback(const ros::TimerEvent& event) {
             << land_q.x() << ","
             << land_q.y() << ","
             << land_q.z() << "," << std::endl;
+  if(trajOptPtr_->init_path_.size()-1 <= 1)
+  {
+    std::cout << "seg num error!!!"<<std::endl;
+  }
+  //平滑
+  Eigen::MatrixXd R = land_q.toRotationMatrix();
+  Eigen::Vector3d tail_q_v_ = R.col(2);
+  trajOptPtr_->init_path_.back() += tail_q_v_ * trajOptPtr_->robot_l_;
+  target_p += tail_q_v_ * trajOptPtr_->robot_l_;
+  // Eigen::VectorXd input_time = timeAllocation(trajOptPtr_->init_path_);//  /1.4;
+  // Eigen::MatrixXd input_Path(trajOptPtr_->init_path_.size(),3);
+  // for(int i=0;i<input_Path.rows();i++)
+  // {
+  //   input_Path.row(i) = trajOptPtr_->init_path_[i];
+  // }
+  double temp_len_pos = 0.0;
+  double total_len = 0.0;
+  double piece_len = 0.8;
+  
+  std::vector<Eigen::Vector3d> snap_pt;
+  snap_pt.emplace_back(-4.0,-4.0,2.0);
+  for (int i=0; i<trajOptPtr_->init_path_.size()-1; i++)
+  {
+      double temp_seg = (trajOptPtr_->init_path_[i+1] - trajOptPtr_->init_path_[i]).norm();
+      temp_len_pos += temp_seg;
+      total_len += temp_seg;
+      while (temp_len_pos > piece_len)
+      {
+          Eigen::Vector3d temp_node = trajOptPtr_->init_path_[i] + (1.0 - (temp_len_pos-piece_len) / temp_seg) * (trajOptPtr_->init_path_[i+1] - trajOptPtr_->init_path_[i]);
+          snap_pt.push_back(temp_node);
+          temp_len_pos -= piece_len;
+      }
+  }
+  snap_pt.emplace_back(target_p);
+  Eigen::VectorXd input_time = timeAllocation(snap_pt);//  /1.4;
+  cout<<"snap_pt: "<<endl;
+  for(int i=0;i<snap_pt.size();i++)
+  {
+    cout<<snap_pt[i].transpose()<<'\n';
+    if(i>=1)
+      cout<<"dist:"<<(snap_pt[i]-snap_pt[i-1]).norm()<<'\n';
+  }
+  for(int i=0;i<input_time.rows();i++)
+    cout<<input_time[i]<<'\n';
 
-  Eigen::MatrixXd iniState1 = iniState;
-  iniState1.col(0).x() = 0;
-  iniState1.col(0).y() = 0;
-  Eigen::Vector3d target_p1 ;
-  target_p1.head(2) = target_p.head(2) - odom_pose.head(2);
-  target_p1.z() = target_p.z();
+  Eigen::MatrixXd input_Path(3,snap_pt.size());
+  for(int i=0;i<input_Path.cols();i++)
+  {
+    input_Path.col(i) = snap_pt[i];
+  }
+  
+  Eigen::MatrixXd iS = Eigen::MatrixXd::Zero(3, 3);
+  Eigen::MatrixXd fS = Eigen::MatrixXd::Zero(3, 3);
+  iS.col(0) << input_Path.leftCols<1>();
+  fS.col(0) << input_Path.rightCols<1>();
+  min_jerk::JerkOpt jerkOpt;
+  jerkOpt.reset(iS, fS, input_Path.cols() - 1);
+  jerkOpt.generate(input_Path.block(0, 1, 3, input_Path.cols() - 2), input_time);
 
-  generate_new_traj_success = trajOptPtr_->generate_traj(iniState, target_p, target_v, land_q, 11, traj);
+  std::vector<double> snap_ts(input_time.rows());
+  for(int i=0;i<snap_ts.size();i++)
+    snap_ts[i] = input_time[i];
+  trajOptPtr_->snap_traj = Trajectory(snap_ts,jerkOpt.getCoefficientMats());
+  double temp=0;
+  for(int i=0;i<input_time.size()-1;i++)
+  {
+    std::cout<<"Time is "<<input_time[i]<<std::endl;
+    std::cout<<"node is "<<trajOptPtr_->snap_traj.getPos(temp)<<std::endl;
+    std::cout<<"v is "<<(trajOptPtr_->snap_traj.getPos(temp+input_time[i])-trajOptPtr_->snap_traj.getPos(temp)).norm()/input_time[i]<<std::endl;
+    temp+=input_time[i];
+  }
+  trajOptPtr_->has_snap_traj = true;
+
+  int N = 5;
+
+  // std::ofstream outFile;
+  // outFile.open("/home/gnij/Fast-Perching-master/bag/union/perch.txt",std::ios_base::app);
+  // if (!outFile.is_open()) {
+  //     std::cerr << "无法打开文件进行写入。\n";
+  //     return ;
+  // }
+  // for (int i = 0; i <= N; ++i) {
+  //   double total_t = trajOptPtr_->snap_traj.getTotalDuration();
+  //   Eigen::Vector3d temp_pos = trajOptPtr_->snap_traj.getPos(double(i)/N * total_t);
+  //   outFile << temp_pos.x() << ' ' << temp_pos.y() << ' ' << temp_pos.z() << '\n';
+  // }
+  // outFile.close();
+
+
+  //trajOptPtr_->init_path_.size()-1;
+  //int N = trajOptPtr_->snap_traj.getTrajLenth() / trajOptPtr_->piece_len + 1;
+
+  // double temp_len_pos = 0.0;
+  // double total_len = 0.0;
+  // double piece_len = 0.8;
+  
+  // for (int i=0; i<trajOptPtr_->init_path_.size()-1; i++)
+  // {
+  //     double temp_seg = (trajOptPtr_->init_path_[i+1] - trajOptPtr_->init_path_[i]).norm();
+  //     temp_len_pos += temp_seg;
+  //     total_len += temp_seg;
+  //     if (temp_len_pos > piece_len)
+  //     {
+  //         Eigen::Vector3d temp_node = trajOptPtr_->init_path_[i] + (1.0 - (temp_len_pos-piece_len) / temp_seg) * (trajOptPtr_->init_path_[i+1] - trajOptPtr_->init_path_[i]);
+  //         trajOptPtr_->inner_xy_node.push_back(temp_node);
+  //         temp_len_pos -= piece_len;
+  //     }
+  // }
+  // visPtr_->visualize_pointcloud(trajOptPtr_->inner_xy_node,"rrt_traj_wpts");
+  // trajOptPtr_->total_time = total_len / trajOptPtr_->vmax_ * 2.0;
+  // int N = trajOptPtr_->inner_xy_node.size()+ 1;
+
+  generate_new_traj_success = trajOptPtr_->generate_traj(iniState, target_p, target_v, land_q, N, traj);
   if (generate_new_traj_success) {
     //visPtr_->visualize_traj(traj, "traj");
     land_traj = traj;
+    //land_traj = trajOptPtr_->snap_traj;
     has_traj = true;
-    Eigen::Vector3d tail_pos = traj.getPos(traj.getTotalDuration());
-    Eigen::Vector3d tail_vel = traj.getVel(traj.getTotalDuration());
-    visPtr_->visualize_arrow(tail_pos, tail_pos + 0.5 * traj.getVel(traj.getTotalDuration()), "tail_vel");
+    Eigen::Vector3d tail_pos = land_traj.getPos(land_traj.getTotalDuration());
+    Eigen::Vector3d tail_vel = land_traj.getVel(land_traj.getTotalDuration());
+    visPtr_->visualize_arrow(tail_pos, tail_pos + 0.5 * land_traj.getVel(land_traj.getTotalDuration()), "tail_vel");
     traj_utils::PolyTraj poly_msg;
-    polyTraj2ROSMsg(poly_msg,traj);
+    polyTraj2ROSMsg(poly_msg,land_traj);
     traj_pub.publish(poly_msg);
   }
   if (!generate_new_traj_success) {
@@ -113,12 +233,12 @@ void PlanManager::debug_timer_callback(const ros::TimerEvent& event) {
   double dt = 0.001;
   Eigen::Quaterniond q_last;
   double max_omega = 0;
-  for (double t = 0; t <= traj.getTotalDuration(); t += dt) {
+  for (double t = 0; t <= land_traj.getTotalDuration(); t += dt) {
     ros::Duration(dt).sleep();
     // drone
-    Eigen::Vector3d p = traj.getPos(t);
-    Eigen::Vector3d a = traj.getAcc(t);
-    Eigen::Vector3d j = traj.getJer(t);
+    Eigen::Vector3d p = land_traj.getPos(t);
+    Eigen::Vector3d a = land_traj.getAcc(t);
+    Eigen::Vector3d j = land_traj.getJer(t);
     Eigen::Vector3d g(0, 0, -9.8);
     Eigen::Vector3d thrust = a - g;
 
@@ -184,9 +304,18 @@ void PlanManager::debug_timer_callback(const ros::TimerEvent& event) {
     //   std::cout << "max omega: " << max_omega << std::endl;
     // }
   }
-  std::cout << "tailV: " << traj.getVel(traj.getTotalDuration()).transpose() << std::endl;
-  std::cout << "max thrust: " << traj.getMaxThrust() << std::endl;
+
+  std::cout << "tailV: " << land_traj.getVel(land_traj.getTotalDuration()).transpose() << std::endl;
+  std::cout << "max thrust: " << land_traj.getMaxThrust() << std::endl;
   std::cout << "max omega: " << max_omega << std::endl;
+
+  std::cout << "maxVel: " << land_traj.getMaxVelRate() << std::endl;
+  std::cout << "maxAcc: " << land_traj.getMaxAccRate() << std::endl;
+  std::cout << "total time: " << land_traj.getTotalDuration() << std::endl;
+  std::cout << "total lenth: " << land_traj.getTrajLenth() << std::endl;
+  std::cout << "endVel: " << land_traj.getVel(land_traj.getTotalDuration()) << std::endl;
+  std::cout << "finall traj len is " << land_traj.getTrajLenth()<< std::endl;
+  std::cout << "final traj time is " << land_traj.getTotalDuration()<< std::endl;
 
   target_recv = false;
 }
@@ -200,6 +329,7 @@ void PlanManager::init(ros::NodeHandle& nh) {
   trajOptPtr_ = std::make_shared<traj_opt::TrajOpt>(nh);
   uneven_map.reset(new uneven_planner::UnevenMap);
   uneven_map->init(nh);
+  pfPtr_ = std::make_shared<PF::TesterPathFinder>(nh,trajOptPtr_->env_ptr_,uneven_map);
 
   //ros timer之间存在阻塞
   plan_timer_ = nh.createTimer(ros::Duration(1.0 / plan_hz_), &PlanManager::debug_timer_callback, this);
@@ -211,6 +341,8 @@ void PlanManager::init(ros::NodeHandle& nh) {
 
   exec_timer_ = nh.createTimer(ros::Duration(0.01), &PlanManager::execFSMCallback, this);
   exec_timer2 = nh.createTimer(ros::Duration(0.5), &PlanManager::visTrajCallback, this);
+
+  goal_pub = nh.advertise<geometry_msgs::Point>("uneven_goal", 10);
 
   ROS_WARN("Planning node initialized!");
 
@@ -258,6 +390,12 @@ void PlanManager::execFSMCallback(const ros::TimerEvent &e)
 
 void PlanManager::visTrajCallback(const ros::TimerEvent &e)
 {
+  if(trajOptPtr_->has_snap_traj)
+  {
+    visPtr_->visualize_traj(trajOptPtr_->snap_traj, "snap_traj");
+
+  }
+    
   if(!has_traj)
     return ;
   visPtr_->visualize_traj(land_traj, "traj");
@@ -265,4 +403,53 @@ void PlanManager::visTrajCallback(const ros::TimerEvent &e)
   Eigen::Vector3d tail_vel = land_traj.getVel(land_traj.getTotalDuration());
   visPtr_->visualize_arrow(tail_pos, tail_pos + 0.5 * land_traj.getVel(land_traj.getTotalDuration()), "tail_vel");
 }
+
+int PlanManager::Factorial(int x) {
+    int fac = 1;
+    for (int i = x; i > 0; i--)
+        fac = fac * i;
+    return fac;
+}
+
+Eigen::VectorXd PlanManager::timeAllocation(const std::vector<Eigen::Vector3d>& Path) {
+    cout<<"trajOptPtr_->vmax_:"<<trajOptPtr_->vmax_<<endl;
+    Eigen::VectorXd times(Path.size() - 1);
+    const double t = trajOptPtr_->vmax_ / trajOptPtr_->amax_;
+    const double dist_threshold_1 = trajOptPtr_->amax_ * t * t;
+
+    double segment_t;
+    for (unsigned int i = 1; i < Path.size(); ++i) {
+        double delta_dist = (Path[i] - Path[i - 1]).norm();
+        if (delta_dist > dist_threshold_1) {
+            segment_t = t * 2 + (delta_dist - dist_threshold_1) / trajOptPtr_->vmax_;
+        } else {
+            segment_t = std::sqrt(delta_dist / trajOptPtr_->amax_);//delta_dist/trajOptPtr_->vmax_;
+        }
+        times[i - 1] = segment_t;
+
+        // if(i==1)
+        // {
+        //   times[i - 1] = delta_dist/trajOptPtr_->vmax_*1.2;//0.5
+        // }
+        // else if(i==2)
+        // {
+        //   times[i - 1] = delta_dist/trajOptPtr_->vmax_*1.2;//0.5
+        // }
+        // else if(i==Path.size()-2)
+        // {
+        //   times[i - 1] = delta_dist/trajOptPtr_->vmax_*0.8;//0.45
+        // }
+        // else if(i==Path.size()-1)
+        // {
+        //   times[i - 1] = delta_dist/trajOptPtr_->vmax_*0.8;//0.55
+        // }
+        // else{
+        //   times[i - 1] = delta_dist/trajOptPtr_->vmax_*1.0;
+        // }
+        
+    }
+    return times;
+}
+
+
 

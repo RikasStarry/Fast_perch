@@ -1,9 +1,11 @@
 manager_node:
   uneven_map:
     show_zbso2: false
+    set_noise: true
     iter_num: 2
     show_type: 5 #1-rough 2-flat 3-spar 4-slope 5-sigma
     maxpt_size: 77  #84
+    stddev: 0.1
     map_size_x: 10.0
     map_size_y: 10.0
     ellipsoid_x: 0.2

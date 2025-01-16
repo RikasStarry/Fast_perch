@@ -37,8 +37,18 @@ namespace env
     // cout << "id: " << id.transpose() << ", idx: " << idxToAddress(id) << ", is in map? " << isInMap(id) << endl;
     if (!isInMap(id))
       return;
-
     occupancy_buffer_[idxToAddress(id)] = true;
+    
+  }
+
+  inline void OccMap::setInflateOccupancy(const Eigen::Vector3d &pos)
+  {
+    Eigen::Vector3i id;
+    posToIndex(pos, id);
+    if (!isInMap(id))
+      return;
+    occupancy_buffer_inflate_[idxToAddress(id)] = true;
+    
   }
 
   void OccMap::globalOccVisCallback(const ros::TimerEvent &e)
@@ -48,11 +58,18 @@ namespace env
     glb_occ_pub_.publish(cloud_msg);
   }
 
+  void OccMap::globalInfOccVisCallback(const ros::TimerEvent &e)
+  {
+    sensor_msgs::PointCloud2 cloud_msg;
+    pcl::toROSMsg(*glb_inf_cloud_ptr_, cloud_msg);
+    glb_occ_inf_pub_.publish(cloud_msg);
+  }
+
   void OccMap::globalCloudCallback(const sensor_msgs::PointCloud2ConstPtr &msg)
   {
     if (is_global_map_valid_)
       return;
-
+    ros::Time t0 = ros::Time::now();
     pcl::PointCloud<pcl::PointXYZ> global_cloud;
     pcl::fromROSMsg(*msg, global_cloud);
     // ROS_ERROR_STREAM(", global_cloud.points.size(): " << global_cloud.points.size());
@@ -90,7 +107,50 @@ namespace env
     glb_cloud_ptr_->header.frame_id = "map";
 
     cout << "glb occ set" << endl;
+
+    Eigen::Vector3d p3d_inf;
+    Eigen::Vector3d ball_center(2.97346,0.353916,0.216263);
+    for (size_t i = 0; i < global_cloud.points.size(); ++i)
+    {
+      pt = global_cloud.points[i];
+      for (int x = -inf_step; x <= inf_step; ++x)
+        for (int y = -inf_step; y <= inf_step; ++y)
+          for (int z = -inf_step_z; z <= inf_step_z; ++z)
+          {
+
+            p3d_inf(0) = pt.x + x * resolution_;
+            p3d_inf(1) = pt.y + y * resolution_;
+            p3d_inf(2) = pt.z + z * resolution_;
+            if((p3d_inf-ball_center).norm()<0.6)
+              continue;
+            this->setInflateOccupancy(p3d_inf);
+          }
+    }
+    is_global_inf_map_valid_ = true;
+
+    glb_inf_cloud_ptr_->points.clear();
+    for (int x = 0; x < grid_size_[0]; ++x)
+      for (int y = 0; y < grid_size_[1]; ++y)
+        for (int z = 0; z < grid_size_[2]; ++z)
+        {
+          if (occupancy_buffer_inflate_[idxToAddress(x, y, z)] == true)
+          {
+            Eigen::Vector3d pos;
+            indexToPos(x, y, z, pos);
+            glb_inf_cloud_ptr_->points.emplace_back(pos[0], pos[1], pos[2]);
+          }
+        }
+    glb_inf_cloud_ptr_->width = glb_inf_cloud_ptr_->points.size();
+    glb_inf_cloud_ptr_->height = 1;
+    glb_inf_cloud_ptr_->is_dense = true;
+    glb_inf_cloud_ptr_->header.frame_id = "map";
+
+    cout << "glb inf occ set" << endl;
+
     global_cloud_sub_.shutdown();
+    ros::Time t1 = ros::Time::now();
+    ros::Duration diff=(t1-t0);
+    std::cout<<"Process grid map cost "<<diff.toSec()<<" s"<<std::endl;
   }
 
   void OccMap::init(const ros::NodeHandle &nh)
@@ -104,9 +164,11 @@ namespace env
     node_.param("occ_map/map_size_y", map_size_(1), 40.0);
     node_.param("occ_map/map_size_z", map_size_(2), 5.0);
     node_.param("occ_map/resolution", resolution_, 0.2);
+    node_.param("occ_map/obstacles_inflation", obstacles_inflation_, 0.0);
     resolution_inv_ = 1 / resolution_;
 
     is_global_map_valid_ = false;
+    is_global_inf_map_valid_ = false;
 
     for (int i = 0; i < 3; ++i)
     {
@@ -116,37 +178,44 @@ namespace env
     min_range_ = origin_;
     max_range_ = origin_ + map_size_;
 
+    inf_step = ceil(obstacles_inflation_ / resolution_);
+    inf_step_z = 0;
+
     // initialize size of buffer
     grid_size_y_multiply_z_ = grid_size_(1) * grid_size_(2);
     int buffer_size = grid_size_(0) * grid_size_y_multiply_z_;
     occupancy_buffer_.resize(buffer_size);
+    occupancy_buffer_inflate_.resize(buffer_size);
     fill(occupancy_buffer_.begin(), occupancy_buffer_.end(), false);
+    fill(occupancy_buffer_inflate_.begin(), occupancy_buffer_inflate_.end(), false);
 
     //set x-y boundary occ
-    for (double cx = min_range_[0] + resolution_ / 2; cx <= max_range_[0] - resolution_ / 2; cx += resolution_)
-      for (double cz = min_range_[2] + resolution_ / 2; cz <= max_range_[2] - resolution_ / 2; cz += resolution_)
-      {
-        this->setOccupancy(Eigen::Vector3d(cx, min_range_[1] + resolution_ / 2, cz));
-        this->setOccupancy(Eigen::Vector3d(cx, max_range_[1] - resolution_ / 2, cz));
-      }
-    for (double cy = min_range_[1] + resolution_ / 2; cy <= max_range_[1] - resolution_ / 2; cy += resolution_)
-      for (double cz = min_range_[2] + resolution_ / 2; cz <= max_range_[2] - resolution_ / 2; cz += resolution_)
-      {
-        this->setOccupancy(Eigen::Vector3d(min_range_[0] + resolution_ / 2, cy, cz));
-        this->setOccupancy(Eigen::Vector3d(max_range_[0] - resolution_ / 2, cy, cz));
-      }
-    //set z-low boundary occ
-    for (double cx = min_range_[0] + resolution_ / 2; cx <= max_range_[0] - resolution_ / 2; cx += resolution_)
-      for (double cy = min_range_[1] + resolution_ / 2; cy <= max_range_[1] - resolution_ / 2; cy += resolution_)
-      {
-        this->setOccupancy(Eigen::Vector3d(cx, cy, min_range_[2] + resolution_ / 2));
-      }
+    // for (double cx = min_range_[0] + resolution_ / 2; cx <= max_range_[0] - resolution_ / 2; cx += resolution_)
+    //   for (double cz = min_range_[2] + resolution_ / 2; cz <= max_range_[2] - resolution_ / 2; cz += resolution_)
+    //   {
+    //     this->setOccupancy(Eigen::Vector3d(cx, min_range_[1] + resolution_ / 2, 2.0));
+    //     this->setOccupancy(Eigen::Vector3d(cx, max_range_[1] - resolution_ / 2, 2.0));
+    //   }
+    // for (double cy = min_range_[1] + resolution_ / 2; cy <= max_range_[1] - resolution_ / 2; cy += resolution_)
+    //   for (double cz = min_range_[2] + resolution_ / 2; cz <= max_range_[2] - resolution_ / 2; cz += resolution_)
+    //   {
+    //     this->setOccupancy(Eigen::Vector3d(min_range_[0] + resolution_ / 2, cy, 2.0));
+    //     this->setOccupancy(Eigen::Vector3d(max_range_[0] - resolution_ / 2, cy, 2.0));
+    //   }
+    // //set z-low boundary occ
+    // for (double cx = min_range_[0] + resolution_ / 2; cx <= max_range_[0] - resolution_ / 2; cx += resolution_)
+    //   for (double cy = min_range_[1] + resolution_ / 2; cy <= max_range_[1] - resolution_ / 2; cy += resolution_)
+    //   {
+    //     this->setOccupancy(Eigen::Vector3d(cx, cy, min_range_[2] + resolution_ / 2));
+    //   }
 
     global_occ_vis_timer_ = node_.createTimer(ros::Duration(5), &OccMap::globalOccVisCallback, this);
+    global_inf_occ_vis_timer_ = node_.createTimer(ros::Duration(5), &OccMap::globalInfOccVisCallback, this);
     global_cloud_sub_ = node_.subscribe<sensor_msgs::PointCloud2>("/global_cloud", 1, &OccMap::globalCloudCallback, this);
     glb_occ_pub_ = node_.advertise<sensor_msgs::PointCloud2>("/occ_map/glb_map", 1);
-
+    glb_occ_inf_pub_ = node_.advertise<sensor_msgs::PointCloud2>("/occ_map/glb_inf_map", 1);
     glb_cloud_ptr_ = boost::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
+    glb_inf_cloud_ptr_ = boost::make_shared<pcl::PointCloud<pcl::PointXYZ>>();
     cout << "map initialized: " << endl;
   }
 

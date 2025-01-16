@@ -16,16 +16,18 @@ find_package(catkin REQUIRED COMPONENTS
   traj_utils
   message_generation
   uneven_map
+  path_finder
 )
 
 catkin_package(
   INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR}
-  CATKIN_DEPENDS traj_opt roscpp traj_utils uneven_map
+  CATKIN_DEPENDS traj_opt roscpp traj_utils uneven_map path_finder
   LIBRARIES ${PROJECT_NAME}
   DEPENDS EIGEN3
 )
 
 include_directories(
+  include
   ${EIGEN3_INCLUDE_DIR}
   ${DECOMP_UTIL_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}

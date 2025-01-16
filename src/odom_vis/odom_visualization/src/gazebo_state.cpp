@@ -56,7 +56,8 @@ void gazebo_state_cb(const gazebo_msgs::ModelStates::ConstPtr& msg)
         odom.pose.pose = msg->pose[model_index];
         odom.twist.twist = msg->twist[model_index];
 
-        pose.header.frame_id = path.header.frame_id = target_frame;
+        pose.header.frame_id = target_frame;
+        path.header.frame_id = target_frame;
         pose.header.stamp = path.header.stamp = ros::Time::now();
         pose.pose = msg->pose[model_index];
         path.poses.push_back(pose);

@@ -64,10 +64,10 @@
     <param name="robot_l" value="0.02"/>
     <param name="robot_r" value="0.15"/>
     <param name="platform_r" value="1.0"/>
-    <param name="v_plus" value="0.1"/>
+    <param name="v_plus" value="0.001"/>
 
-    <param name="rhoT" value="10000.0"/>
-    <param name="rhoP" value="10000000.0"/>
+    <param name="rhoT" value="50000.0"/>
+    <param name="rhoP" value="1000.0"/>
     <param name="rhoV" value="100000.0"/>
     <param name="rhoA" value="100000.0"/>
     <param name="rhoVt" value="1000000.0"/>

@@ -108,7 +108,7 @@ namespace PF
                 vis_ptr_->visualize_path_list(routes, "rrt_star_paths", visualization::yellow);
                 vector<Eigen::Vector3d> final_path = rrt_star_ptr_->getPath();
 
-                //handle_finalpath(final_path);
+                handle_finalpath(final_path);
 
                 vis_ptr_->visualize_path(final_path, "rrt_star_final_path");
                 vis_ptr_->visualize_pointcloud(final_path, "rrt_star_final_wpts");
@@ -176,7 +176,7 @@ namespace PF
         v.clear();
 
         std::ifstream inFile;
-        inFile.open("/home/gnij/Fast-Perching-master/bag/union/perch.txt");
+        inFile.open("/home/gnij/Fast-Perching-master/bag/collision/snap.txt");
         if (!inFile.is_open()) {
             std::cerr << "无法打开文件进行读取。\n";
             return;

@@ -141,17 +141,17 @@ void PlanManager::debug_timer_callback(const ros::TimerEvent& event) {
   }
   trajOptPtr_->has_snap_traj = true;
 
-  int N = 5;
+  int N = 10;
 
   // std::ofstream outFile;
-  // outFile.open("/home/gnij/Fast-Perching-master/bag/union/perch.txt",std::ios_base::app);
+  // outFile.open("/home/gnij/Fast-Perching-master/bag/collision/perch.txt",std::ios_base::app);
   // if (!outFile.is_open()) {
   //     std::cerr << "无法打开文件进行写入。\n";
   //     return ;
   // }
-  // for (int i = 0; i <= N; ++i) {
+  // for (int i = 0; i <= 2*N; ++i) {
   //   double total_t = trajOptPtr_->snap_traj.getTotalDuration();
-  //   Eigen::Vector3d temp_pos = trajOptPtr_->snap_traj.getPos(double(i)/N * total_t);
+  //   Eigen::Vector3d temp_pos = trajOptPtr_->snap_traj.getPos(double(i)/(N *2.0) * total_t);
   //   outFile << temp_pos.x() << ' ' << temp_pos.y() << ' ' << temp_pos.z() << '\n';
   // }
   // outFile.close();

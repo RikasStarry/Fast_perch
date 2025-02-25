@@ -3,8 +3,4 @@ src/CMakeLists.txt
 devel
 build
 debug
-txts
-bags
-*.bag
 *.bag.active
-src/real_flight

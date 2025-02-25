@@ -1,7 +1,7 @@
 manager_node:
   uneven_map:
     show_zbso2: false
-    set_noise: true
+    set_noise: false
     iter_num: 2
     show_type: 5 #1-rough 2-flat 3-spar 4-slope 5-sigma
     maxpt_size: 77  #84

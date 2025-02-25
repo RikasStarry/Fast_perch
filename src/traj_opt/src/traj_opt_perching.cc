@@ -166,92 +166,12 @@ static inline double objectiveFunc(void* ptrObj,
   obj.addTimeIntPenalty(cost);
   toc = std::chrono::steady_clock::now();
   tictoc_integral_ += (toc - tic).count();
-  //自定义代价要放在calGrads_PT前面
-  if(bvp_valid)
-  {
-    gradP = obj.mincoOpt_.gdP;
-    cost += 5.0 * obj.rhoVt_*(P.col(obj.dim_p_-1)-mid_pos).squaredNorm();
-    gradP.col(obj.dim_p_-1) += 5.0 * obj.rhoVt_*2*(P.col(obj.dim_p_-1)-mid_pos);
-    std::cout << "The cost of midPt is :" << 5.0 * obj.rhoVt_*(P.col(obj.dim_p_-1)-mid_pos).squaredNorm() << std::endl;
-  }
-
-  double cost_teb = 0.0;
-  double rhoTeb = 0;//100000;
-
-  double s1 = obj.mincoOpt_.t(1);
-  double s2 = s1 * s1;
-  double s3 = s2 * s1;
-  double s4 = s2 * s2;
-  double s5 = s4 * s1;
-  double s6 = s4 * s2;
-  double s7 = s4 * s3;
-  Eigen::Matrix<double, 8, 1> beta0_xy;
-  beta0_xy << 1.0, s1, s2, s3, s4, s5, s6, s7;
-  Eigen::Matrix<double, 8, 1> beta1_xy;
-  beta1_xy << 0.0, 1.0, 2.0 * s1, 3.0 * s2, 4.0 * s3, 5.0 * s4, 6.0 * s5, 7.0 * s6;
-
-  Eigen::Vector3d xy_sqrt = obj.initS_.col(0) + P.col(1) - 2*P.col(0);
-  cost_teb += xy_sqrt.squaredNorm();
-
-  const Eigen::Matrix<double, 8, 3> &c_xy1 = obj.mincoOpt_.c.block<8, 3>(0, 0);
-  Eigen::Vector3d vel = c_xy1.transpose() * beta1_xy;
-  obj.mincoOpt_.gdC.block<8, 3>(0, 0) += beta0_xy * -4 * xy_sqrt.transpose();
-  obj.mincoOpt_.gdT += -4 * xy_sqrt.dot(vel) * 1.0;
-
-  const Eigen::Matrix<double, 8, 3> &c_xy2 = obj.mincoOpt_.c.block<8, 3>(1, 0);
-  vel = c_xy2.transpose() * beta1_xy;
-  obj.mincoOpt_.gdC.block<8, 3>(1, 0) += beta0_xy * 2 * xy_sqrt.transpose();
-  obj.mincoOpt_.gdT += 2 * xy_sqrt.dot(vel) * 1.0;
-
-
-  for(int i=0;i<P.cols()-3;++i)
-  {
-    xy_sqrt = (P.col(i) + P.col(i+2) - 2*P.col(i+1));
-    cost_teb += xy_sqrt.squaredNorm();
-
-    const Eigen::Matrix<double, 8, 3> &c_xyl = obj.mincoOpt_.c.block<8, 3>(i, 0);
-    vel = c_xyl.transpose() * beta1_xy;
-    obj.mincoOpt_.gdC.block<8, 3>(0, 0) += beta0_xy * 2 * xy_sqrt.transpose();
-    obj.mincoOpt_.gdT += 2 * xy_sqrt.dot(vel) * 1.0;
-
-    const Eigen::Matrix<double, 8, 3> &c_xymid = obj.mincoOpt_.c.block<8, 3>(i+1, 0);
-    vel = c_xymid.transpose() * beta1_xy;
-    obj.mincoOpt_.gdC.block<8, 3>(1, 0) += beta0_xy * -4 * xy_sqrt.transpose();
-    obj.mincoOpt_.gdT += -4 * xy_sqrt.dot(vel) * 1.0;
-
-    const Eigen::Matrix<double, 8, 3> &c_xyr = obj.mincoOpt_.c.block<8, 3>(i+2, 0);
-    vel = c_xyr.transpose() * beta1_xy;
-    obj.mincoOpt_.gdC.block<8, 3>(0, 0) += beta0_xy * 2 * xy_sqrt.transpose();
-    obj.mincoOpt_.gdT += 2 * xy_sqrt.dot(vel) * 1.0;
-  }
-
-  xy_sqrt = (P.col(P.cols()-2) + tailS.col(0) - 2*P.col(P.cols()-1));
-  cost_teb += xy_sqrt.squaredNorm();
-
-  const Eigen::Matrix<double, 8, 3> &c_xy3 = obj.mincoOpt_.c.block<8, 3>(8*(obj.N_-2), 0);
-  vel = c_xy3.transpose() * beta1_xy;
-  obj.mincoOpt_.gdC.block<8, 3>(0, 0) += beta0_xy * 2 * xy_sqrt.transpose();
-  obj.mincoOpt_.gdT += 2 * xy_sqrt.dot(vel) * 1.0;
-
-  const Eigen::Matrix<double, 8, 3> &c_xy4 = obj.mincoOpt_.c.block<8, 3>(8*(obj.N_-1), 0);
-  vel = c_xy4.transpose() * beta1_xy;
-  obj.mincoOpt_.gdC.block<8, 3>(1, 0) += beta0_xy * -4 * xy_sqrt.transpose();
-  obj.mincoOpt_.gdT += -4 * xy_sqrt.dot(vel) * 1.0;
-
-  cost_teb *= rhoTeb;
-  cost += cost_teb;
-  std::cout << "The cost of Teb is :" << cost_teb << std::endl;
-
-  // double cost_smooth = 0;
-  // obj.addSmoothPenalty(cost_smooth);
-  // std::cout << "The cost of Smooth is :" << cost_smooth << std::endl;
-  // cost += cost_smooth;
 
   tic = std::chrono::steady_clock::now();
   obj.mincoOpt_.calGrads_PT();
   toc = std::chrono::steady_clock::now();
   tictoc_innerloop_ += (toc - tic).count();
-  //std::cout << "cost of penalty: " << cost - cost_with_only_energy << std::endl;
+
   //tailS.col(0) = car_p_ + car_v_ * obj.N_ * dT + tail_q_v_ * robot_l_;
   //tailS.col(1) = tailV;
   //tailS.col(2) = forward_thrust(tail_f) * tail_q_v_ + g_;
@@ -266,9 +186,9 @@ static inline double objectiveFunc(void* ptrObj,
   //   grad_vt.y() = grad_tailV.dot(v_t_y_);
 
   //   double vt_norm = vt.norm();
-  //   cost += obj.rhoVt_ * pow((vt_norm - 0.1),2);
-  //   grad_vt += obj.rhoVt_ * 2 * (vt_norm - 0.1) * vt * 1/(vt_norm+0.000000001);
-  //   std::cout << "The cost of Vt.norm is :" << obj.rhoVt_ * pow((vt_norm - 0.3),2) << std::endl;
+  //   cost += obj.rhoVt_ * vt_norm;
+  //   grad_vt += obj.rhoVt_ * 2 * vt;
+  //   std::cout << "The cost of Vt.norm is :" << obj.rhoVt_ * vt_norm << std::endl;
 
   //   Eigen::Vector3d vt_add = vt(0)*v_t_x_ + vt(1)*v_t_y_;
   //   double xb_err = xb_.norm()*vt_add.norm()-xb_.dot(vt_add);
@@ -284,6 +204,7 @@ static inline double objectiveFunc(void* ptrObj,
   cost += obj.rhoT_ * dT;
   gradt = obj.mincoOpt_.gdT * gdT2t(t);
   std::cout << "The cost of dT is :" << obj.rhoT_ * dT << std::endl;
+  gradP = obj.mincoOpt_.gdP;
 
   return cost;
 }
@@ -536,6 +457,21 @@ bool TrajOpt::generate_traj(const Eigen::MatrixXd& iniState,
         }
       }
       mincoOpt_.generate(initS_,end_state,P,tt0);
+      parseFile("/home/gnij/inform/sfc/sfc2.txt");
+      //
+      // std::ofstream outFile;
+      // outFile.open("/home/gnij/Fast-Perching-master/bag/collision/snap.txt",std::ios_base::app);
+      // if (!outFile.is_open()) {
+      //     std::cerr << "无法打开文件进行写入。\n";
+      //     return false;
+      // }
+      // outFile << initS_.col(0).transpose() << '\n';
+      // for (int i = 0; i < P.cols(); ++i) {
+      //   outFile << P.col(i).x() << ' ' << P.col(i).y() << ' ' << P.col(i).z() << '\n';
+      // }
+      // outFile << end_state.col(0).transpose() << '\n';
+      // outFile.close();
+      //
       std::cout << "end pt is " << mincoOpt_.getTraj().getPos(total_time)<< std::endl;
       visPtr_->visualize_traj(mincoOpt_.getTraj(), "smooth_traj");
       
@@ -811,7 +747,7 @@ void TrajOpt::addTimeIntPenalty(double& cost) {
       grad_tmp3.setZero();
       cost_inner = 0.0;
 
-      if (grad_cost_floor(pos, grad_tmp, cost_tmp)) {
+      if (grad_cost_floor(pos, grad_tmp, cost_tmp, i)) {
         grad_p += grad_tmp;
         cost_inner += cost_tmp;
         cost_floor += omg * step * cost_tmp;
@@ -1010,15 +946,24 @@ bool TrajOpt::grad_cost_omega_yaw(const Eigen::Vector3d& a,
 
 bool TrajOpt::grad_cost_floor(const Eigen::Vector3d& p,
                               Eigen::Vector3d& gradp,
-                              double& costp) {
-  static double z_floor = 0.0;
-  double pen = z_floor - p.z();//实际函数
-  if (pen > 0) {
-    double grad = 0;
-    costp = smoothedL1(pen, grad);
-    costp *= rhoP_;
-    gradp.setZero();
-    gradp.z() = -rhoP_ * grad;
+                              double& costp,int i) {
+  double pen = 0;
+  double grad = 0;
+  costp = 0;
+  gradp.setZero();
+  gradp.z() = -rhoP_ * grad;
+  for(int r=0;r<sfc.returnA(i).rows();r++)
+  {
+    pen = sfc.returnA(i).row(r) * p - sfc.returnb(i)(r);
+    if(pen > 0)
+    {
+      costp += smoothedL1(pen, grad);
+      costp *= rhoP_;
+      gradp += rhoP_ * grad * sfc.returnA(i).row(r).transpose();
+    }
+  }
+
+  if (costp > 0) {
     return true;
   } else {
     return false;

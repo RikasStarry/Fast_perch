@@ -14,9 +14,6 @@
                 "${workspaceFolder}/devel/include",
                 "${workspaceFolder}/src/uneven_map/include",
                 "${workspaceFolder}/src/occ_grid/include",
-                "${workspaceFolder}/src/decompROS",
-                "${workspaceFolder}/src/decompROS/decomp_ros_utils/include",
-                "${workspaceFolder}/src/decompROS/DecompUtil/include",
                 "${workspaceFolder}/src/new_path_finder/include",
                 "${workspaceFolder}/src",
                 "${workspaceFolder}/src/sub_topic/include"

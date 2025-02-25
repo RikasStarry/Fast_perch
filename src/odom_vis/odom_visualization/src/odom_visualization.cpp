@@ -188,7 +188,7 @@ int main(int argc, char** argv) {
   ros::NodeHandle n("~");
 
   // n.param("mesh_resource", mesh_resource, std::string("package://odom_visualization/meshes/hummingbird.mesh"));
-  n.param("mesh_resource", mesh_resource, std::string("package://odom_visualization/meshes/flymesh.dae"));
+  n.param("mesh_resource", mesh_resource, std::string("package://odom_visualization/meshes/flymesh2.dae"));
 
   n.param("origin", origin, false);
   n.param("robot_scale", scale, 2.0);

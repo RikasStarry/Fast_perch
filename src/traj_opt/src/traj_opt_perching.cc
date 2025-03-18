@@ -132,6 +132,7 @@ static inline double objectiveFunc(void* ptrObj,
                                    const int n) {
   // std::cout << "damn" << std::endl;
   iter_times_++;
+  std::cout << "iter_times_ is :" << iter_times_ << std::endl;
   TrajOpt& obj = *(TrajOpt*)ptrObj;
   const double& t = x[0];
   double& gradt = grad[0];
@@ -159,6 +160,13 @@ static inline double objectiveFunc(void* ptrObj,
   obj.mincoOpt_.calGrads_CT();//J对CT梯度
   std::cout << "The cost of Snap is :" << cost << std::endl;
 
+  //obj.costRecorder.open("/home/gnij/Fast-Perching-master/bag/collision/cost.txt",std::ios_base::app);
+  // if (!obj.costRecorder.is_open()) {
+  //     std::cerr << "无法打开文件进行写入。\n";
+  // }
+  // obj.costRecorder << iter_times_ << ' ' << cost << ' ';
+
+
   auto toc = std::chrono::steady_clock::now();
   tictoc_innerloop_ += (toc - tic).count();
 
@@ -180,7 +188,8 @@ static inline double objectiveFunc(void* ptrObj,
   grad_tailV = obj.mincoOpt_.gdTail.col(1);
   double grad_thrust = obj.mincoOpt_.gdTail.col(2).dot(tail_q_v_);//∂K/∂tao
   addLayerThrust(tail_f, grad_thrust, grad_f);//∂K/∂taof
-  //tailV = land_v_ + vt.x() * v_t_x_ + vt.y() * v_t_y_
+
+  // tailV = land_v_ + vt.x() * v_t_x_ + vt.y() * v_t_y_;
   // if (obj.rhoVt_ > -1) {
   //   grad_vt.x() = grad_tailV.dot(v_t_x_);
   //   grad_vt.y() = grad_tailV.dot(v_t_y_);
@@ -189,15 +198,16 @@ static inline double objectiveFunc(void* ptrObj,
   //   cost += obj.rhoVt_ * vt_norm;
   //   grad_vt += obj.rhoVt_ * 2 * vt;
   //   std::cout << "The cost of Vt.norm is :" << obj.rhoVt_ * vt_norm << std::endl;
-
-  //   Eigen::Vector3d vt_add = vt(0)*v_t_x_ + vt(1)*v_t_y_;
-  //   double xb_err = xb_.norm()*vt_add.norm()-xb_.dot(vt_add);
-  //   Eigen::Matrix<double, 2, 3> m_temp;
-  //   m_temp.row(0) = v_t_x_.transpose();
-  //   m_temp.row(1) = v_t_y_.transpose();
-  //   cost += 10.0 * obj.rhoVt_ * pow(xb_err,2);
-  //   grad_vt += 10.0 * obj.rhoVt_ * 2 * xb_err * (xb_.norm()* m_temp * vt_add/(vt_add.norm()+0.000000001) - m_temp * xb_);
-  //   std::cout << "The cost of Vt.direction is :" << 10.0 * obj.rhoVt_ * pow(xb_err,2) << std::endl;
+  //   obj.costRecorder << obj.rhoVt_ * vt_norm << '\n';
+  // }
+    // Eigen::Vector3d vt_add = vt(0)*v_t_x_ + vt(1)*v_t_y_;
+    // double xb_err = xb_.norm()*vt_add.norm()-xb_.dot(vt_add);
+    // Eigen::Matrix<double, 2, 3> m_temp;
+    // m_temp.row(0) = v_t_x_.transpose();
+    // m_temp.row(1) = v_t_y_.transpose();
+    // cost += 10.0 * obj.rhoVt_ * pow(xb_err,2);
+    // grad_vt += 10.0 * obj.rhoVt_ * 2 * xb_err * (xb_.norm()* m_temp * vt_add/(vt_add.norm()+0.000000001) - m_temp * xb_);
+    // std::cout << "The cost of Vt.direction is :" << 10.0 * obj.rhoVt_ * pow(xb_err,2) << std::endl;
   // }
 
   obj.mincoOpt_.gdT += obj.rhoT_;//单段时间而非总时间
@@ -205,6 +215,9 @@ static inline double objectiveFunc(void* ptrObj,
   gradt = obj.mincoOpt_.gdT * gdT2t(t);
   std::cout << "The cost of dT is :" << obj.rhoT_ * dT << std::endl;
   gradP = obj.mincoOpt_.gdP;
+
+  //obj.costRecorder << obj.rhoT_ * dT << '\n';
+  //obj.costRecorder.close();
 
   return cost;
 }
@@ -340,13 +353,15 @@ bool TrajOpt::generate_traj(const Eigen::MatrixXd& iniState,
   xb_ = land_q.toRotationMatrix().col(0);
   std::cout << "Vector xb_ is :" << xb_.transpose() << std::endl;
 
-  v_t_x_ = tail_q_v_.cross(Eigen::Vector3d(0, 0, 1));
-  if (v_t_x_.squaredNorm() == 0) {
-    v_t_x_ = tail_q_v_.cross(Eigen::Vector3d(0, 1, 0));
-  }
-  v_t_x_.normalize();
-  v_t_y_ = tail_q_v_.cross(v_t_x_);
-  v_t_y_.normalize();
+  // v_t_x_ = tail_q_v_.cross(Eigen::Vector3d(0, 0, 1));
+  // if (v_t_x_.squaredNorm() == 0) {
+  //   v_t_x_ = tail_q_v_.cross(Eigen::Vector3d(0, 1, 0));
+  // }
+  // v_t_x_.normalize();
+  // v_t_y_ = tail_q_v_.cross(v_t_x_);
+  // v_t_y_.normalize();
+  v_t_x_ = xb_;
+  v_t_y_ = xb_;
 
   vt.setConstant(0.0);
 
@@ -435,21 +450,24 @@ bool TrajOpt::generate_traj(const Eigen::MatrixXd& iniState,
       end_state.col(3).setZero();
       //尝试3
       double total_time = snap_traj.getTotalDuration();
-      double tt0 = total_time / N ;
+      std::cout << "snap total_time is " << snap_traj.getTotalDuration()<< std::endl;
+      double tt0 = total_time / N * 2.0;
       t = logC2(tt0 * 1.0);
       int i=0;
       Eigen::Vector3d pos_last = snap_traj.getPos(0.0);
       Eigen::Vector3d pos_next = snap_traj.getPos(0.0);
       double lenth_ = 0.0;
       double seglen = snap_traj.getTrajLenth()/N;
-      for(double ts=0.1;ts<total_time;ts+=0.1)
+      for(double ts=0.01;ts<total_time;ts+=0.01)
       {
         pos_next = snap_traj.getPos(ts);
+        //std::cout<<pos_next.transpose()<<std::endl;
         lenth_ += (pos_next-pos_last).norm();
         pos_last = pos_next;
         if(lenth_>seglen)
         {
           P.col(i) = pos_next;
+          //std::cout<<P.col(i).transpose()<<std::endl;
           i++;
           lenth_ = 0.0;
           if(i>=N-1)
@@ -457,10 +475,10 @@ bool TrajOpt::generate_traj(const Eigen::MatrixXd& iniState,
         }
       }
       mincoOpt_.generate(initS_,end_state,P,tt0);
-      parseFile("/home/gnij/inform/sfc/sfc2.txt");
+      parseFile("/home/gnij/inform/sfc/union/sfc_union.txt");
       //
       // std::ofstream outFile;
-      // outFile.open("/home/gnij/Fast-Perching-master/bag/collision/snap.txt",std::ios_base::app);
+      // outFile.open("/home/gnij/Fast-Perching-master/bag/union/snap.txt",std::ios_base::app);
       // if (!outFile.is_open()) {
       //     std::cerr << "无法打开文件进行写入。\n";
       //     return false;
@@ -684,7 +702,8 @@ bool TrajOpt::generate_traj(const Eigen::MatrixXd& iniState,
   std::cout << "total lenth: " << traj.getTrajLenth() << std::endl;
   std::cout << "endVel: " << traj.getVel(traj.getTotalDuration()) << std::endl;
 
-  std::cout << "finall traj len is " << traj.getTrajLenth()<< std::endl;
+  std::cout << "final traj len is " << traj.getTrajLenth()<< std::endl;
+  //std::cout << "snap traj len is " << snap_traj.getTrajLenth()<< std::endl;
   std::cout << "final traj time is " << traj.getTotalDuration()<< std::endl;
 
   init_traj_ = traj;
@@ -812,6 +831,7 @@ void TrajOpt::addTimeIntPenalty(double& cost) {
   // std::cout << "The cost of thrust is :" << cost_thrust << std::endl;
   // std::cout << "The cost of omega is :" << cost_omega << std::endl;
   // std::cout << "The cost of perchCollision is :" << cost_perchCollision << std::endl;
+  // costRecorder << cost_floor << ' ' << cost_v << ' ' << cost_omega << ' ' << cost_thrust << ' ' << cost_perchCollision << ' ';
 }
 
 

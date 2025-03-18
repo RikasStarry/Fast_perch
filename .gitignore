@@ -3,4 +3,5 @@ src/CMakeLists.txt
 devel
 build
 debug
+logs
 *.bag.active

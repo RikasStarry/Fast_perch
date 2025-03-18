@@ -8,6 +8,7 @@ void PlanManager::rcvWpsCallBack(const geometry_msgs::PoseStampedConstPtr& msgPt
   Eigen::Vector3d temp_pos;
   double temp_yaw = 2 * asin(msgPtr->pose.orientation.z);
   std::cout<<"temp_yaw is :"<<temp_yaw<<std::endl;
+
   uneven_map->normSO2(temp_yaw);
   temp_pos << msgPtr->pose.position.x, msgPtr->pose.position.y, temp_yaw;
   uneven_map->getTerrainPos(temp_pos,temp_m,goal_);
@@ -75,6 +76,7 @@ void PlanManager::debug_timer_callback(const ros::TimerEvent& event) {
   //平滑
   Eigen::MatrixXd R = land_q.toRotationMatrix();
   Eigen::Vector3d tail_q_v_ = R.col(2);
+  std::cout << "slope" << tail_q_v_(2) << std::endl;
   trajOptPtr_->init_path_.back() += tail_q_v_ * trajOptPtr_->robot_l_;
   target_p += tail_q_v_ * trajOptPtr_->robot_l_;
   // Eigen::VectorXd input_time = timeAllocation(trajOptPtr_->init_path_);//  /1.4;
@@ -88,7 +90,9 @@ void PlanManager::debug_timer_callback(const ros::TimerEvent& event) {
   double piece_len = 0.8;
   
   std::vector<Eigen::Vector3d> snap_pt;
-  snap_pt.emplace_back(-4.0,-4.0,2.0);
+
+  snap_pt.emplace_back(iniState.col(0));
+
   for (int i=0; i<trajOptPtr_->init_path_.size()-1; i++)
   {
       double temp_seg = (trajOptPtr_->init_path_[i+1] - trajOptPtr_->init_path_[i]).norm();
@@ -103,15 +107,15 @@ void PlanManager::debug_timer_callback(const ros::TimerEvent& event) {
   }
   snap_pt.emplace_back(target_p);
   Eigen::VectorXd input_time = timeAllocation(snap_pt);//  /1.4;
-  cout<<"snap_pt: "<<endl;
-  for(int i=0;i<snap_pt.size();i++)
-  {
-    cout<<snap_pt[i].transpose()<<'\n';
-    if(i>=1)
-      cout<<"dist:"<<(snap_pt[i]-snap_pt[i-1]).norm()<<'\n';
-  }
-  for(int i=0;i<input_time.rows();i++)
-    cout<<input_time[i]<<'\n';
+  // cout<<"snap_pt: "<<endl;
+  // for(int i=0;i<snap_pt.size();i++)
+  // {
+  //   cout<<snap_pt[i].transpose()<<'\n';
+  //   if(i>=1)
+  //     cout<<"dist:"<<(snap_pt[i]-snap_pt[i-1]).norm()<<'\n';
+  // }
+  // for(int i=0;i<input_time.rows();i++)
+  //   cout<<input_time[i]<<'\n';
 
   Eigen::MatrixXd input_Path(3,snap_pt.size());
   for(int i=0;i<input_Path.cols();i++)
@@ -131,28 +135,28 @@ void PlanManager::debug_timer_callback(const ros::TimerEvent& event) {
   for(int i=0;i<snap_ts.size();i++)
     snap_ts[i] = input_time[i];
   trajOptPtr_->snap_traj = Trajectory(snap_ts,jerkOpt.getCoefficientMats());
-  double temp=0;
-  for(int i=0;i<input_time.size()-1;i++)
-  {
-    std::cout<<"Time is "<<input_time[i]<<std::endl;
-    std::cout<<"node is "<<trajOptPtr_->snap_traj.getPos(temp)<<std::endl;
-    std::cout<<"v is "<<(trajOptPtr_->snap_traj.getPos(temp+input_time[i])-trajOptPtr_->snap_traj.getPos(temp)).norm()/input_time[i]<<std::endl;
-    temp+=input_time[i];
-  }
+  // double temp=0;
+  // for(int i=0;i<input_time.size()-1;i++)
+  // {
+  //   std::cout<<"Time is "<<input_time[i]<<std::endl;
+  //   std::cout<<"node is "<<trajOptPtr_->snap_traj.getPos(temp)<<std::endl;
+  //   std::cout<<"v is "<<(trajOptPtr_->snap_traj.getPos(temp+input_time[i])-trajOptPtr_->snap_traj.getPos(temp)).norm()/input_time[i]<<std::endl;
+  //   temp+=input_time[i];
+  // }
   trajOptPtr_->has_snap_traj = true;
 
   int N = 10;
 
   // std::ofstream outFile;
-  // outFile.open("/home/gnij/Fast-Perching-master/bag/collision/perch.txt",std::ios_base::app);
+  // outFile.open("/home/gnij/Fast-Perching-master/bag/union/perch2.txt",std::ios_base::app);
   // if (!outFile.is_open()) {
   //     std::cerr << "无法打开文件进行写入。\n";
   //     return ;
   // }
-  // for (int i = 0; i <= 2*N; ++i) {
+  // for (int i = 0; i <= N; ++i) {
   //   double total_t = trajOptPtr_->snap_traj.getTotalDuration();
-  //   Eigen::Vector3d temp_pos = trajOptPtr_->snap_traj.getPos(double(i)/(N *2.0) * total_t);
-  //   outFile << temp_pos.x() << ' ' << temp_pos.y() << ' ' << temp_pos.z() << '\n';
+  //   Eigen::Vector3d temp_pos = trajOptPtr_->snap_traj.getPos(double(i)/(N) * total_t);
+    
   // }
   // outFile.close();
 

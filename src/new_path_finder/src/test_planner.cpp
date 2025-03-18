@@ -176,7 +176,7 @@ namespace PF
         v.clear();
 
         std::ifstream inFile;
-        inFile.open("/home/gnij/Fast-Perching-master/bag/collision/snap.txt");
+        inFile.open("/home/gnij/Fast-Perching-master/bag/union/land/snap.txt");
         if (!inFile.is_open()) {
             std::cerr << "无法打开文件进行读取。\n";
             return;

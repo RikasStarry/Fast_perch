@@ -109,7 +109,7 @@ namespace env
     cout << "glb occ set" << endl;
 
     Eigen::Vector3d p3d_inf;
-    Eigen::Vector3d ball_center(2.97346,0.353916,0.216263);
+    Eigen::Vector3d ball_center(-1.5209,0.187581,0.426725);
     for (size_t i = 0; i < global_cloud.points.size(); ++i)
     {
       pt = global_cloud.points[i];

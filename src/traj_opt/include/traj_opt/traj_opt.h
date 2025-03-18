@@ -73,6 +73,8 @@ class TrajOpt {
   ros::Publisher ellipsoid_pub;
 
   SFC sfc;
+  std::ofstream costRecorder;
+
  public:
   TrajOpt(ros::NodeHandle& nh);
   ~TrajOpt() {}
@@ -235,11 +237,11 @@ void TrajOpt::parseFile(std::string filename)
   }
   // 关闭文件
   file.close();
-  for (size_t i = 0; i < sfc.sfc_A.size(); ++i) {
-      std::cout << "第 " << i  << " 组数据:\n";
-      std::cout << "矩阵 A:\n" << sfc.returnA(i) << "\n";
-      std::cout << "向量 b:\n" << sfc.returnb(i) << "\n";
-  }  
+  // for (size_t i = 0; i < sfc.sfc_A.size(); ++i) {
+  //     std::cout << "第 " << i  << " 组数据:\n";
+  //     std::cout << "矩阵 A:\n" << sfc.returnA(i) << "\n";
+  //     std::cout << "向量 b:\n" << sfc.returnb(i) << "\n";
+  // }  
 }  // parseFile
 
 }  // namespace traj_opt

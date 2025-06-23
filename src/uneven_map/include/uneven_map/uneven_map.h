@@ -74,11 +74,9 @@ namespace uneven_planner
     {
         private:
             // params
-            bool            show_zbso2;
             bool            set_noise;
             int             iter_num;
             int             show_type;
-            int             maxpt_size;
             double          stddev;
             double          ellipsoid_x;
             double          ellipsoid_y;
@@ -96,8 +94,6 @@ namespace uneven_planner
             double          max_rho;
             double          gravity;
             double          mass;
-            static int      lowlim;
-            static int      uplim;
             static Eigen::Vector4d lamda;
             Eigen::Vector3d map_origin;
             Eigen::Vector3d map_size;
@@ -121,7 +117,6 @@ namespace uneven_planner
             vector<char>    occ_r2_buffer;
             pcl::PointCloud<pcl::PointXYZ>::Ptr world_cloud;
             pcl::PointCloud<pcl::PointXY>::Ptr world_cloud_plane;
-            pcl::PointCloud<pcl::PointXYZ>::Ptr world_cloud_collision;
             pcl::KdTreeFLANN<pcl::PointXYZ> kd_tree;
             pcl::KdTreeFLANN<pcl::PointXY> kd_tree_plane;
 
@@ -129,16 +124,10 @@ namespace uneven_planner
             ros::Publisher                  origin_pub;
             ros::Publisher                  filtered_pub;
             ros::Publisher                  collision_pub;
-            ros::Publisher                  zb_pub;
-            ros::Publisher                  so2_test_pub;
-            ros::Publisher                  iter_pub;
             ros::Timer                      vis_timer;
             sensor_msgs::PointCloud2        origin_cloud_msg;
             sensor_msgs::PointCloud2        filtered_cloud_msg;
-            sensor_msgs::PointCloud2        collision_cloud_msg;
-            visualization_msgs::MarkerArray so2_test_msg;
-            visualization_msgs::MarkerArray zb_msg; 
-            visualization_msgs::MarkerArray iter_msg;   
+            sensor_msgs::PointCloud2        collision_cloud_msg; 
             bool                            map_ready = false;
 
         public:
@@ -183,9 +172,6 @@ namespace uneven_planner
             inline int isOccupancyXY(const Eigen::Vector3d& pxy);
             inline int getXYNum();
             inline bool mapReady();
-            inline bool iscollisionFress(const Eigen::Vector3d& pos);
-            inline bool isinBox(const Eigen::Vector3d& pos);
-            inline void pointSeg(const pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_c, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_g);
 
             typedef shared_ptr<UnevenMap> Ptr;
             typedef unique_ptr<UnevenMap> UniPtr;
@@ -621,197 +607,5 @@ namespace uneven_planner
     inline bool UnevenMap::mapReady()
     {
         return map_ready;
-    }
-
-    inline void UnevenMap::pointSeg(const pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_c,pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_g)
-    {
-        pcl::PointCloud<pcl::PointXYZ> collision1,collision2,collision3,collision4,collision5,collision6,collision7,collision8,collision9,collision10;
-        
-        //1
-        pcl::CropBox<pcl::PointXYZ> clipper_collision1;
-        clipper_collision1.setMin(Eigen::Vector4f(-2.3, -4.5, 0.207, 1.0));
-        clipper_collision1.setMax(Eigen::Vector4f(-1.8, -3.86, 3.0, 1.0));
-        clipper_collision1.setInputCloud(cloud_c);
-        clipper_collision1.setNegative(false);
-        clipper_collision1.filter(collision1);        
-
-        pcl::CropBox<pcl::PointXYZ> clipper_ground1;
-        pcl::PointCloud<pcl::PointXYZ> temp1;
-        clipper_ground1.setMin(Eigen::Vector4f(-2.3, -4.5, 0.207, 1.0));
-        clipper_ground1.setMax(Eigen::Vector4f(-1.8, -3.86, 3.0, 1.0));
-        clipper_ground1.setInputCloud(cloud_c);
-        clipper_ground1.setNegative(true);
-        clipper_ground1.filter(temp1);       
-        //cloud_g->clear();
-
-        //2
-        pcl::CropBox<pcl::PointXYZ> clipper_collision2;
-        clipper_collision2.setMin(Eigen::Vector4f(-3.424, -3.2, 0.035, 1.0));
-        clipper_collision2.setMax(Eigen::Vector4f(-2.892, -2.502, 3.0, 1.0));
-        clipper_collision2.setInputCloud(cloud_c);
-        clipper_collision2.setNegative(false);
-        clipper_collision2.filter(collision2);
-
-        pcl::CropBox<pcl::PointXYZ> clipper_ground2;
-        pcl::PointCloud<pcl::PointXYZ> temp2;
-        clipper_ground2.setMin(Eigen::Vector4f(-3.424, -3.2, 0.035, 1.0));
-        clipper_ground2.setMax(Eigen::Vector4f(-2.892, -2.502, 3.0, 1.0));
-        clipper_ground2.setInputCloud(temp1.makeShared());
-        clipper_ground2.setNegative(true);
-        clipper_ground2.filter(temp2);      
-        temp1.clear();
-        //3
-        pcl::CropBox<pcl::PointXYZ> clipper_collision3;
-        clipper_collision3.setMin(Eigen::Vector4f(0.25, -4.04, 0.254, 1.0));
-        clipper_collision3.setMax(Eigen::Vector4f(0.673, -3.5, 3.0, 1.0));
-        clipper_collision3.setInputCloud(cloud_c);
-        clipper_collision3.setNegative(false);
-        clipper_collision3.filter(collision3);        
-
-        pcl::PointCloud<pcl::PointXYZ> temp3;
-        pcl::CropBox<pcl::PointXYZ> clipper_ground3;
-        clipper_ground3.setMin(Eigen::Vector4f(0.25, -4.04, 0.254, 1.0));
-        clipper_ground3.setMax(Eigen::Vector4f(0.673, -3.5, 3.0, 1.0));
-        clipper_ground3.setInputCloud(temp2.makeShared());
-        clipper_ground3.setNegative(true);
-        clipper_ground3.filter(temp3);
-        temp2.clear();
-        //4
-        pcl::CropBox<pcl::PointXYZ> clipper_collision4;
-        clipper_collision4.setMin(Eigen::Vector4f(-1.9, -1.45, 0.157, 1.0));
-        clipper_collision4.setMax(Eigen::Vector4f(-1.38, -0.82, 3.0, 1.0));
-        clipper_collision4.setInputCloud(cloud_c);
-        clipper_collision4.setNegative(false);
-        clipper_collision4.filter(collision4);
-
-        pcl::PointCloud<pcl::PointXYZ> temp4;
-        pcl::CropBox<pcl::PointXYZ> clipper_ground4;
-        clipper_ground4.setMin(Eigen::Vector4f(-1.9, -1.45, 0.157, 1.0));
-        clipper_ground4.setMax(Eigen::Vector4f(-1.38, -0.82, 3.0, 1.0));
-        clipper_ground4.setInputCloud(temp3.makeShared());
-        clipper_ground4.setNegative(true);
-        clipper_ground4.filter(temp4);        
-        temp3.clear();
-        //5
-        pcl::CropBox<pcl::PointXYZ> clipper_collision5;
-        clipper_collision5.setMin(Eigen::Vector4f(-3.2, 0.195, 0.542, 1.0));
-        clipper_collision5.setMax(Eigen::Vector4f(-2.71, 0.65, 3.0, 1.0));
-        clipper_collision5.setInputCloud(cloud_c);
-        clipper_collision5.setNegative(false);
-        clipper_collision5.filter(collision5);        
-
-        pcl::PointCloud<pcl::PointXYZ> temp5;
-        pcl::CropBox<pcl::PointXYZ> clipper_ground5;
-        clipper_ground5.setMin(Eigen::Vector4f(-3.2, 0.195, 0.542, 1.0));
-        clipper_ground5.setMax(Eigen::Vector4f(-2.71, 0.65, 3.0, 1.0));
-        clipper_ground5.setInputCloud(temp4.makeShared());
-        clipper_ground5.setNegative(true);
-        clipper_ground5.filter(temp5);       
-        temp4.clear();
-        //6
-        pcl::CropBox<pcl::PointXYZ> clipper_collision6;
-        clipper_collision6.setMin(Eigen::Vector4f(0.098, -0.96, 0.619, 1.0));
-        clipper_collision6.setMax(Eigen::Vector4f(0.52, -0.396, 3.0, 1.0));
-        clipper_collision6.setInputCloud(cloud_c);
-        clipper_collision6.setNegative(false);
-        clipper_collision6.filter(collision6);       
-
-        pcl::PointCloud<pcl::PointXYZ> temp6;
-        pcl::CropBox<pcl::PointXYZ> clipper_ground6;
-        clipper_ground6.setMin(Eigen::Vector4f(0.098, -0.96, 0.619, 1.0));
-        clipper_ground6.setMax(Eigen::Vector4f(0.52, -0.396, 3.0, 1.0));
-        clipper_ground6.setInputCloud(temp5.makeShared());
-        clipper_ground6.setNegative(true);
-        clipper_ground6.filter(temp6);        
-        temp5.clear();
-        //7
-        pcl::CropBox<pcl::PointXYZ> clipper_collision7;
-        clipper_collision7.setMin(Eigen::Vector4f(2.857, -1.315, 0.275, 1.0));
-        clipper_collision7.setMax(Eigen::Vector4f(3.33, -0.879, 3.0, 1.0));
-        clipper_collision7.setInputCloud(cloud_c);
-        clipper_collision7.setNegative(false);
-        clipper_collision7.filter(collision7);       
-
-        pcl::PointCloud<pcl::PointXYZ> temp7;
-        pcl::CropBox<pcl::PointXYZ> clipper_ground7;
-        clipper_ground7.setMin(Eigen::Vector4f(2.857, -1.315, 0.275, 1.0));
-        clipper_ground7.setMax(Eigen::Vector4f(3.33, -0.879, 3.0, 1.0));
-        clipper_ground7.setInputCloud(temp6.makeShared());
-        clipper_ground7.setNegative(true);
-        clipper_ground7.filter(temp7);        
-        temp6.clear();
-        //8
-        pcl::CropBox<pcl::PointXYZ> clipper_collision8;
-        clipper_collision8.setMin(Eigen::Vector4f(1.465, -0.116, 0.136, 1.0));
-        clipper_collision8.setMax(Eigen::Vector4f(1.898, 0.398, 3.0, 1.0));
-        clipper_collision8.setInputCloud(cloud_c);
-        clipper_collision8.setNegative(false);
-        clipper_collision8.filter(collision8);        
-
-        pcl::PointCloud<pcl::PointXYZ> temp8;
-        pcl::CropBox<pcl::PointXYZ> clipper_ground8;
-        clipper_ground8.setMin(Eigen::Vector4f(1.465, -0.116, 0.136, 1.0));
-        clipper_ground8.setMax(Eigen::Vector4f(1.898, 0.398, 3.0, 1.0));
-        clipper_ground8.setInputCloud(temp7.makeShared());
-        clipper_ground8.setNegative(true);
-        clipper_ground8.filter(temp8);        
-        temp7.clear();
-        //9
-        pcl::CropBox<pcl::PointXYZ> clipper_collision9;
-        clipper_collision9.setMin(Eigen::Vector4f(-3.09, 3.294, 0.666, 1.0));
-        clipper_collision9.setMax(Eigen::Vector4f(-2.595, 3.880, 3.0, 1.0));
-        clipper_collision9.setInputCloud(cloud_c);
-        clipper_collision9.setNegative(false);
-        clipper_collision9.filter(collision9);       
-
-        pcl::PointCloud<pcl::PointXYZ> temp9;
-        pcl::CropBox<pcl::PointXYZ> clipper_ground9;
-        clipper_ground9.setMin(Eigen::Vector4f(-3.09, 3.294, 0.666, 1.0));
-        clipper_ground9.setMax(Eigen::Vector4f(-2.595, 3.880, 3.0, 1.0));
-        clipper_ground9.setInputCloud(temp8.makeShared());
-        clipper_ground9.setNegative(true);
-        clipper_ground9.filter(temp9);        
-        temp8.clear();
-        //10
-        pcl::CropBox<pcl::PointXYZ> clipper_collision10;
-        clipper_collision10.setMin(Eigen::Vector4f(3.0235, 1.4224, 0.295, 1.0));
-        clipper_collision10.setMax(Eigen::Vector4f(3.366, 1.82, 3.0, 1.0));
-        clipper_collision10.setInputCloud(cloud_c);
-        clipper_collision10.setNegative(false);
-        clipper_collision10.filter(collision10);
-        
-
-        pcl::CropBox<pcl::PointXYZ> clipper_ground10;
-        clipper_ground10.setMin(Eigen::Vector4f(3.0235, 1.4224, 0.295, 1.0));
-        clipper_ground10.setMax(Eigen::Vector4f(3.366, 1.82, 3.0, 1.0));
-        clipper_ground10.setInputCloud(temp9.makeShared());
-        clipper_ground10.setNegative(true);
-        clipper_ground10.filter(*cloud_g);
-        temp9.clear();
-
-        *world_cloud_collision = collision1 
-                                + collision2 + collision3
-                                + collision4 + collision5 + collision6
-                                + collision7 + collision8 + collision9 + collision10;
-        world_cloud_collision->width = world_cloud_collision->points.size();
-        world_cloud_collision->height = 1;
-        world_cloud_collision->is_dense = true;
-        world_cloud_collision->header.frame_id = "world";
-
-        if(set_noise)
-        {
-            noise_x=std::normal_distribution<double>(0.0, stddev);
-            noise_y=std::normal_distribution<double>(0.0, stddev);
-            noise_z=std::normal_distribution<double>(0.0, stddev);
-
-            for (auto& point : *world_cloud_collision)
-            {
-                point.x += noise_x(gen);
-                point.y += noise_y(gen);
-                point.z += noise_z(gen);
-
-            }
-        }
-        pcl::toROSMsg(*world_cloud_collision, collision_cloud_msg);      
     }
 }

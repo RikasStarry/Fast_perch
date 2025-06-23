@@ -1,18 +1,17 @@
 manager_node:
   uneven_map:
-    show_zbso2: false
     set_noise: false
     iter_num: 2
     show_type: 5 #1-rough 2-flat 3-spar 4-slope 5-sigma
     maxpt_size: 77  #84
     stddev: 0.1
-    map_size_x: 10.0
+    map_size_x: 16.0
     map_size_y: 10.0
     ellipsoid_x: 0.2
     ellipsoid_y: 0.1
     ellipsoid_z: 0.1
     xy_resolution: 0.05
-    yaw_resolution: 0.1
+    yaw_resolution: 0.3
     min_cnormal: 0.8
     max_sparsity: 0.99
     offset: 0.0 #0.12
@@ -21,6 +20,6 @@ manager_node:
     lamda2: 0 #flatness
     lamda3: 0 #sparsity
     lamda4: 0 #slope
-    max_rho: 0.05
+    max_rho: 0.02
     gravity: 9.81
     mass: 1.0

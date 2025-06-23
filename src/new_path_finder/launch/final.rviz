@@ -11,12 +11,11 @@ Panels:
         - /Mapping1/collision1/Autocompute Value Bounds1
         - /Mapping1/origin1
         - /Mapping1/origin1/Autocompute Value Bounds1
+        - /Mapping1/filtered_map1
         - /Mapping1/glb_map1/Autocompute Value Bounds1
         - /Mapping1/glb_inf_map1
         - /Mapping1/glb_inf_map1/Autocompute Value Bounds1
         - /Mapping1/flat_map1
-        - /Mapping1/collision21
-        - /Mapping1/collision21/Autocompute Value Bounds1
         - /RRTPath1
         - /RRTPath1/edges1
         - /RRTPath1/RRT*_converge_paths1
@@ -157,9 +156,9 @@ Visualization Manager:
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
-            Max Value: -1.2000000476837158
-            Min Value: 1.5
-            Value: false
+            Max Value: 5.999932765960693
+            Min Value: -0.06755804270505905
+            Value: true
           Axis: Z
           Channel Name: intensity
           Class: rviz/PointCloud2
@@ -182,6 +181,34 @@ Visualization Manager:
           Use Fixed Frame: true
           Use rainbow: true
           Value: true
+        - Alpha: 1
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: -1.5
+            Min Value: 1.2000000476837158
+            Value: false
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz/PointCloud2
+          Color: 252; 211; 47
+          Color Transformer: RGB8
+          Decay Time: 0
+          Enabled: false
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Min Color: 0; 0; 0
+          Name: filtered_map
+          Position Transformer: XYZ
+          Queue Size: 10
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.05000000074505806
+          Style: Squares
+          Topic: /filtered_map
+          Unreliable: false
+          Use Fixed Frame: true
+          Use rainbow: true
+          Value: false
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -213,9 +240,9 @@ Visualization Manager:
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
-            Max Value: -1.2000000476837158
-            Min Value: 1.5
-            Value: false
+            Max Value: 5.974999904632568
+            Min Value: -0.07500000298023224
+            Value: true
           Axis: Z
           Channel Name: intensity
           Class: rviz/PointCloud2
@@ -266,34 +293,6 @@ Visualization Manager:
           Use Fixed Frame: true
           Use rainbow: true
           Value: true
-        - Alpha: 1
-          Autocompute Intensity Bounds: true
-          Autocompute Value Bounds:
-            Max Value: -1.5
-            Min Value: 1.2000000476837158
-            Value: false
-          Axis: Z
-          Channel Name: intensity
-          Class: rviz/PointCloud2
-          Color: 252; 211; 47
-          Color Transformer: AxisColor
-          Decay Time: 0
-          Enabled: false
-          Invert Rainbow: false
-          Max Color: 255; 255; 255
-          Min Color: 0; 0; 0
-          Name: collision2
-          Position Transformer: XYZ
-          Queue Size: 10
-          Selectable: true
-          Size (Pixels): 3
-          Size (m): 0.019999999552965164
-          Style: Squares
-          Topic: /collision_map
-          Unreliable: false
-          Use Fixed Frame: true
-          Use rainbow: true
-          Value: false
       Enabled: true
       Name: Mapping
     - Class: rviz/Group
@@ -342,7 +341,7 @@ Visualization Manager:
           Buffer Length: 1
           Class: rviz/Path
           Color: 58; 181; 179
-          Enabled: false
+          Enabled: true
           Head Diameter: 0.30000001192092896
           Head Length: 0.20000000298023224
           Length: 0.30000001192092896
@@ -361,7 +360,7 @@ Visualization Manager:
           Shaft Length: 0.10000000149011612
           Topic: /manager_node/rrt_star_final_path
           Unreliable: false
-          Value: false
+          Value: true
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -453,7 +452,7 @@ Visualization Manager:
           Buffer Length: 1
           Class: rviz/Path
           Color: 25; 255; 255
-          Enabled: false
+          Enabled: true
           Head Diameter: 0.30000001192092896
           Head Length: 0.20000000298023224
           Length: 0.30000001192092896
@@ -472,7 +471,7 @@ Visualization Manager:
           Shaft Length: 0.10000000149011612
           Topic: /manager_node/snap_traj
           Unreliable: false
-          Value: false
+          Value: true
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -680,7 +679,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/XYOrbit
-      Distance: 13.020849227905273
+      Distance: 23.921737670898438
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -688,17 +687,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: -0.8687319159507751
-        Y: 2.5789074897766113
-        Z: -1.3218966614658711e-06
+        X: 9.881680488586426
+        Y: -2.0510847568511963
+        Z: 4.0394604639004683e-07
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.9447967410087585
+      Pitch: 1.2703980207443237
       Target Frame: map
-      Yaw: 1.6003986597061157
+      Yaw: 4.74358606338501
     Saved: ~
 Window Geometry:
   Displays:

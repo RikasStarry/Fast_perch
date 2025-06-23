@@ -1,8 +1,6 @@
 #include "uneven_map/uneven_map.h"
 namespace uneven_planner
 {
-    int UnevenMap::lowlim = 0.0;
-    int UnevenMap::uplim = 0.0;
     Eigen::Vector4d UnevenMap::lamda = Eigen::Vector4d::Zero();
 
     RXS2 UnevenMap::filter(Eigen::Vector3d pos, vector<Eigen::Vector3d>& points ,double deltah)
@@ -51,19 +49,9 @@ namespace uneven_planner
             rs2.assess(1) = deltah;
         }
         //sparsity
-        if(points.size()<lowlim)
-        {
-            rs2.assess(2) = 1.0;
-        }
-        else if(points.size()>=lowlim && points.size()<=uplim)
-        {
-            double prop = double(points.size()-lowlim)/double(uplim-lowlim);
-            rs2.assess(2) = 1.0-prop;
-        }
-        else
-        {
-            rs2.assess(2) = 0.0;
-        }
+
+        rs2.assess(2) = 0.0;
+
         double slope = 2.0 * acos(rs2.getC())/M_PI;
         rs2.sigma = lamda.dot(Eigen::Vector4d(rs2.assess(0),rs2.assess(1),rs2.assess(2),slope));
         return rs2;
@@ -99,11 +87,9 @@ namespace uneven_planner
 
     void UnevenMap::init(ros::NodeHandle& nh)
     {
-        nh.getParam("uneven_map/show_zbso2", show_zbso2);
         nh.getParam("uneven_map/set_noise", set_noise);
         nh.getParam("uneven_map/iter_num", iter_num);
         nh.getParam("uneven_map/show_type", show_type);
-        nh.getParam("uneven_map/maxpt_size", maxpt_size);
         nh.getParam("uneven_map/stddev", stddev);
         nh.getParam("uneven_map/map_size_x", map_size[0]);
         nh.getParam("uneven_map/map_size_y", map_size[1]);
@@ -128,27 +114,19 @@ namespace uneven_planner
         origin_pub = nh.advertise<sensor_msgs::PointCloud2>("/origin_map", 1);
         filtered_pub = nh.advertise<sensor_msgs::PointCloud2>("/filtered_map", 1);
         collision_pub = nh.advertise<sensor_msgs::PointCloud2>("/collision_map", 1);
-        vis_timer = nh.createTimer(ros::Duration(1.0), &UnevenMap::visCallback, this);
-        if(show_zbso2)
-        {
-            zb_pub = nh.advertise<visualization_msgs::MarkerArray>("/zb_map", 1);
-            so2_test_pub = nh.advertise<visualization_msgs::MarkerArray>("/so2_map", 1);
-            iter_pub = nh.advertise<visualization_msgs::MarkerArray>("/iter_map", 1);
-        } 
+        //vis_timer = nh.createTimer(ros::Duration(1.0), &UnevenMap::visCallback, this);
 
         // size
         map_size[2] = 2.0 * M_PI + 5e-2;
         
         // origin and boundary
-        min_boundary = -map_size / 2.0;
-        max_boundary = map_size / 2.0;
+        min_boundary = Eigen::Vector3d(0.0,-4.0,-map_size(2) / 2.0);
+        max_boundary = Eigen::Vector3d(map_size(0),6.0,map_size(2) / 2.0);
         map_origin = min_boundary;
 
         // resolution
         xy_resolution_inv = 1.0 / xy_resolution;
         yaw_resolution_inv = 1.0 / yaw_resolution;
-        lowlim = ceil(0.4*maxpt_size);
-        uplim = ceil(min_cnormal*maxpt_size);
         lamda << lamda1,lamda2,lamda3,lamda4;
         // voxel num
         voxel_num(0) = ceil(map_size(0) / xy_resolution);
@@ -165,66 +143,30 @@ namespace uneven_planner
         c_buffer   = vector<double>(buffer_size, 1.0);
         occ_buffer = vector<char>(buffer_size, 0);
         occ_r2_buffer = vector<char>(getXYNum(), 0);
+
         world_cloud.reset(new pcl::PointCloud<pcl::PointXYZ>());
         world_cloud_plane.reset(new pcl::PointCloud<pcl::PointXY>());
-        world_cloud_collision.reset(new pcl::PointCloud<pcl::PointXYZ>());
-
-        static std::random_device rd;
-        static std::mt19937 gen(rd()); 
-        static std::normal_distribution<double> noise_x(0.0, stddev); 
-        static std::normal_distribution<double> noise_y(0.0, stddev);
-        static std::normal_distribution<double> noise_z(0.0, stddev);
 
         // world cloud process
-        pcl::PointCloud<pcl::PointXYZ> cloudMapOrigin_collision;
-        pcl::PointCloud<pcl::PointXYZ>::Ptr cloudMapOrigin_ground;
-        cloudMapOrigin_ground.reset(new pcl::PointCloud<pcl::PointXYZ>());
+        pcl::PointCloud<pcl::PointXYZ> cloudMapOrigin;
         pcl::PointCloud<pcl::PointXYZ> cloudMapClipper;
 
         pcl::PCDReader reader;
-        //reader.read<pcl::PointXYZ>(pcd_file, cloudMapOrigin_ground);
-        reader.read<pcl::PointXYZ>(pcd_file, cloudMapOrigin_collision);
-
-        cloudMapOrigin_collision.width = cloudMapOrigin_collision.points.size();
-        cloudMapOrigin_collision.height = 1;
-        cloudMapOrigin_collision.is_dense = true;
-        cloudMapOrigin_collision.header.frame_id = "world";
-
-        if(set_noise)
-        {
-            //带噪声的origin
-            pcl::PointCloud<pcl::PointXYZ> cloudMapOrigin_collision_temp = cloudMapOrigin_collision;
-            cloudMapOrigin_collision_temp.header.frame_id = "world";
-            cloudMapOrigin_collision.width = cloudMapOrigin_collision.points.size();
-            cloudMapOrigin_collision.height = 1;
-            cloudMapOrigin_collision.is_dense = true;
-            for (auto& point : cloudMapOrigin_collision_temp)
-            {
-                point.x += noise_x(gen);
-                point.y += noise_y(gen);
-                point.z += noise_z(gen);
-            }
-            pcl::toROSMsg(cloudMapOrigin_collision_temp, origin_cloud_msg);
-        }
-        else
-        {
-            pcl::toROSMsg(cloudMapOrigin_collision, origin_cloud_msg);
-        }
-        //点云切割
-        pointSeg(cloudMapOrigin_collision.makeShared(),cloudMapOrigin_ground);
-        cloudMapOrigin_collision.clear();
+        reader.read<pcl::PointXYZ>(pcd_file, cloudMapOrigin);
 
         pcl::CropBox<pcl::PointXYZ> clipper;
-        clipper.setMin(Eigen::Vector4f(-10.0, -10.0, -0.01, 1.0));
-        clipper.setMax(Eigen::Vector4f(10.0, 10.0, 5.0, 1.0));
-        clipper.setInputCloud(cloudMapOrigin_ground);
+        clipper.setMin(Eigen::Vector4f(-0.5, -4.0, -0.1, 1.0));
+        clipper.setMax(Eigen::Vector4f(16.0, 6.0, 6.0, 1.0));
+        clipper.setInputCloud(cloudMapOrigin.makeShared());
         clipper.filter(cloudMapClipper);
-        cloudMapOrigin_ground->clear();
+        cloudMapOrigin.clear();
 
-        pcl::VoxelGrid<pcl::PointXYZ> dwzFilter;
-        dwzFilter.setLeafSize(0.01, 0.01, 0.01);
-        dwzFilter.setInputCloud(cloudMapClipper.makeShared());
-        dwzFilter.filter(*world_cloud);
+        // pcl::VoxelGrid<pcl::PointXYZ> dwzFilter;
+        // dwzFilter.setLeafSize(0.01, 0.01, 0.01);
+        // dwzFilter.setInputCloud(cloudMapClipper.makeShared());
+        // dwzFilter.filter(*world_cloud);
+        // cloudMapClipper.clear();
+        world_cloud = cloudMapClipper.makeShared();
         cloudMapClipper.clear();
 
         for (std::size_t i=0; i<world_cloud->points.size(); i++)
@@ -244,7 +186,16 @@ namespace uneven_planner
         world_cloud_plane->header.frame_id = "world";
         kd_tree.setInputCloud(world_cloud);
         kd_tree_plane.setInputCloud(world_cloud_plane);
-        //pcl::toROSMsg(*world_cloud, origin_cloud_msg);
+
+        pcl::toROSMsg(*world_cloud, origin_cloud_msg);
+
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr downsample_map(new pcl::PointCloud<pcl::PointXYZRGB>);
+        pcl::io::loadPCDFile<pcl::PointXYZRGB>("/home/gnij/Fast-Perching-master/src/uneven_map/maps/downsample.pcd", *downsample_map);
+        downsample_map->width = downsample_map->points.size();
+        downsample_map->height = 1;
+        downsample_map->is_dense = true;
+        downsample_map->header.frame_id = "world";
+        pcl::toROSMsg(*downsample_map, collision_cloud_msg);
 
         // construct map: SO(2) --> RXS2
         if (!constructMapInput())
@@ -260,24 +211,28 @@ namespace uneven_planner
         for (int x=0; x<voxel_num[0]; x++)
             for (int y=0; y<voxel_num[1]; y++)
                 for (int yaw=0; yaw<voxel_num[2]; yaw++)
-                {   
+                {                       
                     RXS2 pt_rs2 = map_buffer[toAddress(x, y, yaw)] ;
                     double pt_c = c_buffer[toAddress(x, y, yaw)];
+
+                    if(pt_rs2.assess(2)>0.0)
+                        continue;
+
                     if ((show_type == 1 && pt_rs2.assess(0) > max_rho)    \
                     || (show_type ==3 && pt_rs2.assess(2) > max_sparsity) \
                     || (show_type ==4 && pt_c < min_cnormal)              \
                     )
                     {
                         occ_buffer[toAddress(x, y, yaw)] = 1;
-                        occ_r2_buffer[x*voxel_num(1)+y] = 1;
+                        //occ_r2_buffer[x*voxel_num(1)+y] = 1;
                         continue;
                     }
 
                     if (show_type == 5 &&   \
-                    (  pt_c < min_cnormal || pt_rs2.assess(0) > max_rho || pt_rs2.assess(2) > max_sparsity ))
+                    (  pt_c < min_cnormal || pt_rs2.assess(0) > max_rho || pt_rs2.assess(1) > 5.0/12.0 ))
                     {
                         occ_buffer[toAddress(x, y, yaw)] = 1;
-                        occ_r2_buffer[x*voxel_num(1)+y] = 1;
+                        //occ_r2_buffer[x*voxel_num(1)+y] = 1;
                     }
 
                     if(pt_rs2.assess(0) <= max_rho)
@@ -334,35 +289,6 @@ namespace uneven_planner
                 pt_filtered.x = filtered_p.x();
                 pt_filtered.y = filtered_p.y();
                 pt_filtered.z = rs2.z;
-                if(show_zbso2)
-                {
-                    //zbso2
-                    //if(pt_filtered.z<1.8)
-                    //iter
-                    if(pt_filtered.x>0 && pt_filtered.x*pt_filtered.x+pt_filtered.y*pt_filtered.y<=6.25 && rs2.z<1.0)
-                    {
-                        if(rs2.z<0.5 && rs2.z>0.01 && pt_filtered.x>0 && pt_filtered.y/pt_filtered.x<=1.0/3.0 && pt_filtered.y/pt_filtered.x>=-1.0/3.0)
-                        {
-                            pt_filtered.r = 173;
-                            pt_filtered.g = 213;
-                            pt_filtered.b = 162;
-                            grid_map_filtered.emplace_back(pt_filtered);
-                            continue;
-                        }
-                        else
-                        {   
-                            pt_filtered.r = pt_blue(0);
-                            pt_filtered.g = pt_blue(1);
-                            pt_filtered.b = pt_blue(2);
-                            grid_map_filtered.emplace_back(pt_filtered);
-                            continue;
-                        }
-                    }
-                    else
-                    {
-                        continue;
-                    }
-                }
 
                 if((show_type!=3 && show_type!=5) && map_buffer[toAddress(x, y, yaw)].assess(2)>max_sparsity)
                 {
@@ -485,343 +411,13 @@ namespace uneven_planner
         grid_map_filtered.height = 1;
         grid_map_filtered.is_dense = true;
         grid_map_filtered.header.frame_id = "world";
-        if(set_noise)
-        {
-            for (auto& point : grid_map_filtered)
-            {
-                point.x += noise_x(gen);
-                point.y += noise_y(gen);
-                point.z += noise_z(gen);
-            }
-        }
+
         pcl::toROSMsg(grid_map_filtered, filtered_cloud_msg);
 
-        if(show_zbso2)
-        {
-            visualization_msgs::Marker zb_arrow;            
-            zb_arrow.type = visualization_msgs::Marker::ARROW;
-            zb_arrow.action = visualization_msgs::Marker::ADD;
-            zb_arrow.header.frame_id = "world";
-            zb_arrow.pose.orientation.w = 1.0;
-            zb_arrow.scale.x = 0.025;//杆宽度
-            zb_arrow.scale.y = 0.05;//头宽度
-            zb_arrow.scale.z = 0.06;//头高度
-            zb_arrow.color.a = 1.0;
-            int yaw = floor(3.0*M_PI_2*yaw_resolution_inv);
-            for (int x=94; x<107; x+=3)
-            {
-                if(x==voxel_num[0]/2)
-                {
-                    continue;
-                }
-                zb_arrow.points.clear();
-                geometry_msgs::Point start, end;
-                Eigen::Vector3d pos;
-                indexToPos(Eigen::Vector3i(x, voxel_num(1)/2, yaw), pos);
-                RXS2 rs2 = map_buffer[toAddress(x, voxel_num(1)/2, yaw)];
-                double c = c_buffer[toAddress(x, voxel_num(1)/2, yaw)];
-                start.x = pos.x();
-                start.y = 0;
-                start.z = rs2.z;
-                end.x = start.x + 5.0 * xy_resolution * rs2.zb.x();
-                end.y = start.y + 5.0 * xy_resolution * rs2.zb.y();
-                end.z = start.z + 5.0 * xy_resolution * c;
+        origin_pub.publish(origin_cloud_msg);
+        filtered_pub.publish(filtered_cloud_msg);
+        collision_pub.publish(collision_cloud_msg);
 
-                zb_arrow.id = x;
-                zb_arrow.color.r = pt_green(0)/255.0;
-                zb_arrow.color.g = pt_green(1)/255.0;
-                zb_arrow.color.b = pt_green(2)/255.0;
-                zb_arrow.points.push_back(start);
-                zb_arrow.points.push_back(end);
-                zb_msg.markers.emplace_back(zb_arrow);
-            }
-            for (int y=94; y<107; y+=3)
-            {
-                zb_arrow.points.clear();
-                geometry_msgs::Point start, end;
-                if(y==voxel_num[1]/2)
-                {
-                    start.x = 0;
-                    start.y = 0;
-                    start.z = 2;
-                    end.x = 0;
-                    end.y = 0;
-                    end.z = 2 + 5.0 * xy_resolution;
-
-                    zb_arrow.id = y + voxel_num[0];
-                    zb_arrow.color.r = pt_purple(0)/255.0;
-                    zb_arrow.color.g = pt_purple(1)/255.0;
-                    zb_arrow.color.b = pt_purple(2)/255.0;
-                    zb_arrow.points.push_back(start);
-                    zb_arrow.points.push_back(end);
-                    zb_msg.markers.emplace_back(zb_arrow);
-                    continue;
-                }
-                
-                Eigen::Vector3d pos;
-                indexToPos(Eigen::Vector3i(voxel_num(0)/2, y, yaw), pos);
-                RXS2 rs2 = map_buffer[toAddress(voxel_num(0)/2, y, yaw)];
-                double c = c_buffer[toAddress(voxel_num(0)/2, y, yaw)];
-                start.x = 0;
-                start.y = pos.y();
-                start.z = rs2.z;
-                end.x = start.x + 5.0 * xy_resolution * rs2.zb.x();
-                end.y = start.y + 5.0 * xy_resolution * rs2.zb.y();
-                end.z = start.z + 5.0 * xy_resolution * c;
-
-                zb_arrow.id = y + voxel_num[0];
-                zb_arrow.color.r = pt_green(0)/255.0;
-                zb_arrow.color.g = pt_green(1)/255.0;
-                zb_arrow.color.b = pt_green(2)/255.0;
-                zb_arrow.points.push_back(start);
-                zb_arrow.points.push_back(end);
-                zb_msg.markers.emplace_back(zb_arrow);
-            }
-
-            visualization_msgs::Marker so2_arrow;            
-            so2_arrow.type = visualization_msgs::Marker::ARROW;
-            so2_arrow.action = visualization_msgs::Marker::ADD;
-            so2_arrow.header.frame_id = "world";
-            so2_arrow.pose.orientation.w = 1.0;
-            so2_arrow.scale.x = 0.025;//杆宽度
-            so2_arrow.scale.y = 0.05;//头宽度
-            so2_arrow.scale.z = 0.06;//头高度
-            so2_arrow.color.a = 0.8;
-
-            visualization_msgs::Marker so2_arrow1;            
-            so2_arrow1.type = visualization_msgs::Marker::ARROW;
-            so2_arrow1.action = visualization_msgs::Marker::ADD;
-            so2_arrow1.header.frame_id = "world";
-            so2_arrow1.pose.orientation.w = 1.0;
-            so2_arrow1.scale.x = 0.025;//杆宽度
-            so2_arrow1.scale.y = 0.05;//头宽度
-            so2_arrow1.scale.z = 0.06;//头高度
-            so2_arrow1.color.a = 0.8;
-
-            visualization_msgs::Marker so2_ellipsoid;            
-            so2_ellipsoid.type = visualization_msgs::Marker::SPHERE;
-            so2_ellipsoid.action = visualization_msgs::Marker::ADD;
-            so2_ellipsoid.header.frame_id = "world";
-            so2_ellipsoid.scale.x = ellipsoid_x;
-            so2_ellipsoid.scale.y = ellipsoid_y;
-            so2_ellipsoid.scale.z = ellipsoid_z;
-            so2_ellipsoid.color.a = 0.5;
-            so2_ellipsoid.color.r = 1.0;
-            so2_ellipsoid.color.g = 0.0;
-            so2_ellipsoid.color.b = 0.0;
-
-            visualization_msgs::Marker yaw_arrow;
-            yaw_arrow.type = visualization_msgs::Marker::ARROW;
-            yaw_arrow.action = visualization_msgs::Marker::ADD;
-            yaw_arrow.header.frame_id = "world";
-            yaw_arrow.pose.orientation.w = 1.0;
-            yaw_arrow.scale.x = 0.003;//杆宽度
-            yaw_arrow.scale.y = 0.015;//头宽度
-            yaw_arrow.scale.z = 0.018;//头高度
-            yaw_arrow.color.a = 1.0;
-
-            visualization_msgs::Marker line;
-            line.type = visualization_msgs::Marker::LINE_LIST;
-            line.header.frame_id = "world";
-            line.action = visualization_msgs::Marker::ADD;
-            line.pose.orientation.w = 1.0;
-            line.scale.x = 0.005;
-            line.color.a = 1.0;
-
-            for(int yaw=0; yaw<voxel_num[2]; yaw+=8)
-            {
-                so2_arrow.points.clear();
-                so2_arrow1.points.clear();
-                yaw_arrow.points.clear();
-                line.points.clear();
-
-                geometry_msgs::Point start, end;
-                double yawAngle = yaw * yaw_resolution;
-                Eigen::AngleAxisd yawRotation(yawAngle, Eigen::Vector3d::UnitZ());
-                Eigen::Matrix3d Ryaw(yawRotation);
-                Eigen::AngleAxisd pitchRotation(7.0*M_PI/50.0, Ryaw.col(1));
-                Eigen::Matrix3d R(pitchRotation * yawRotation);
-                Eigen::Vector3d zb = R.col(2);
-                Eigen::Vector3d xb = R.col(0);
-                start.x = 5.0 * xy_resolution * cos(yawAngle);
-                start.y = 5.0 * xy_resolution * sin(yawAngle);
-                start.z = 2.1-0.12-0.095;
-                end.x = start.x + 3.0 * xy_resolution * zb.x();
-                end.y = start.y + 3.0 * xy_resolution * zb.y();
-                end.z = start.z + 3.0 * xy_resolution * zb.z();
-                Eigen::Quaterniond q(R);
-                q.normalize();
-                geometry_msgs::Point end1;
-                end1.x = start.x + 3.5 * xy_resolution * xb.x();
-                end1.y = start.y + 3.5 * xy_resolution * xb.y();
-                end1.z = start.z + 3.5 * xy_resolution * xb.z();
-
-                so2_ellipsoid.id = yaw;
-                so2_ellipsoid.pose.position.x = start.x; 
-                so2_ellipsoid.pose.position.y = start.y;
-                so2_ellipsoid.pose.position.z = start.z;
-                so2_ellipsoid.pose.orientation.w = q.w();
-                so2_ellipsoid.pose.orientation.x = q.x();
-                so2_ellipsoid.pose.orientation.y = q.y();
-                so2_ellipsoid.pose.orientation.z = q.z();
-                so2_test_msg.markers.emplace_back(so2_ellipsoid);
-
-                so2_arrow.id = yaw + 1;
-                so2_arrow.color.r = 192.0/255.0;
-                so2_arrow.color.g = 196.0/255.0;
-                so2_arrow.color.b = 195.0/255.0;
-                so2_arrow.points.push_back(start);
-                so2_arrow.points.push_back(end);
-                so2_test_msg.markers.emplace_back(so2_arrow);
-
-                so2_arrow1.id = yaw + 2;
-                so2_arrow1.color.r = so2_arrow.color.r;
-                so2_arrow1.color.g = so2_arrow.color.g;
-                so2_arrow1.color.b = so2_arrow.color.b;
-                so2_arrow1.points.push_back(start);
-                so2_arrow1.points.push_back(end1);
-                so2_test_msg.markers.emplace_back(so2_arrow1);
-
-                geometry_msgs::Point start2, end2;
-                start2.x = 0;
-                start2.y = 0;
-                start2.z = 2.0;
-                end2.x = start2.x + 2.0 * xy_resolution * cos(yawAngle);
-                end2.y = start2.y + 2.0 * xy_resolution * sin(yawAngle);
-                end2.z = start2.z;
-                yaw_arrow.id = yaw + 3;
-                yaw_arrow.color.r = so2_arrow.color.r;
-                yaw_arrow.color.g = so2_arrow.color.g;
-                yaw_arrow.color.b = so2_arrow.color.b; 
-                yaw_arrow.points.push_back(start2);
-                yaw_arrow.points.push_back(end2);
-                so2_test_msg.markers.emplace_back(yaw_arrow);
-
-                line.id = yaw + 4;
-                line.color.r = so2_arrow.color.r;
-                line.color.g = so2_arrow.color.g;
-                line.color.b = so2_arrow.color.b;
-                geometry_msgs::Point midpt;
-                for(int seg=0;seg<14;++seg)
-                {
-                    midpt.x = double(seg)/13.0*5.0 * xy_resolution * cos(yawAngle);
-                    midpt.y = double(seg)/13.0*5.0 * xy_resolution * sin(yawAngle);
-                    midpt.z = 2.0+double(seg)/13.0*(start.z-2.0);
-                    line.points.push_back(midpt);
-                } 
-                so2_test_msg.markers.emplace_back(line);  
-            }
-            
-            Eigen::Vector3d pos;
-            Eigen::Matrix3d R;
-            //getTerrainPos(Eigen::Vector3d(1.7,0,0),R,pos);
-            indexToPos(Eigen::Vector3i(132, 100, 0), pos);
-            visualization_msgs::Marker iter_ellipsoid;            
-            iter_ellipsoid.type = visualization_msgs::Marker::SPHERE;
-            iter_ellipsoid.action = visualization_msgs::Marker::ADD;
-            iter_ellipsoid.header.frame_id = "world";
-            iter_ellipsoid.scale.x = 2 * ellipsoid_x;
-            iter_ellipsoid.scale.y = 2 * ellipsoid_y;
-            iter_ellipsoid.scale.z = 2 * ellipsoid_z;
-            iter_ellipsoid.color.a = 0.5;
-            iter_ellipsoid.color.r = 1.0;
-            iter_ellipsoid.color.g = 0.0;
-            iter_ellipsoid.color.b = 0.0;
-            iter_ellipsoid.id = 0;
-            iter_ellipsoid.pose.position.x = pos.x(); 
-            iter_ellipsoid.pose.position.y = pos.y();
-            iter_ellipsoid.pose.position.z = map_buffer[toAddress(132, 100, 0)].z;
-            Eigen::Vector3d pos1;
-            indexToPos(Eigen::Vector3i(133, 100, 0), pos1);
-            double pitch =atan2((pos1.x()-pos.x()),(map_buffer[toAddress(132, 100, 0)].z-map_buffer[toAddress(133, 100, 0)].z));
-            //double pitch = M_PI/6.0;
-            iter_ellipsoid.pose.orientation.w = cos(pitch/2.0);
-            iter_ellipsoid.pose.orientation.x = 0;
-            iter_ellipsoid.pose.orientation.y = sqrt(1.0-pow(iter_ellipsoid.pose.orientation.w,2));
-            iter_ellipsoid.pose.orientation.z = 0;
-            iter_msg.markers.emplace_back(iter_ellipsoid); 
-
-            visualization_msgs::Marker iter_arrow;            
-            iter_arrow.type = visualization_msgs::Marker::ARROW;
-            iter_arrow.action = visualization_msgs::Marker::ADD;
-            iter_arrow.header.frame_id = "world";
-            iter_arrow.pose.orientation.w = 1.0;
-            iter_arrow.scale.x = 0.015;//杆宽度
-            iter_arrow.scale.y = 0.03;//头宽度
-            iter_arrow.scale.z = 0.04;//头高度
-            iter_arrow.color.a = 1.0;
-
-            visualization_msgs::Marker iter_arrow1;            
-            iter_arrow1.type = visualization_msgs::Marker::ARROW;
-            iter_arrow1.action = visualization_msgs::Marker::ADD;
-            iter_arrow1.header.frame_id = "world";
-            iter_arrow1.pose.orientation.w = 1.0;
-            iter_arrow1.scale.x = 0.015;//杆宽度
-            iter_arrow1.scale.y = 0.03;//头宽度
-            iter_arrow1.scale.z = 0.04;//头高度
-            iter_arrow1.color.a = 1.0;
-
-            geometry_msgs::Point start3,end3;
-            start3.x = pos.x();
-            start3.y = pos.y();
-            start3.z = iter_ellipsoid.pose.position.z;
-            end3.x = pos.x() + cos(pitch) * 0.25;
-            end3.y = pos.y();
-            end3.z = iter_ellipsoid.pose.position.z - sin(pitch) * 0.25;
-            iter_arrow.id = 1;
-            iter_arrow.color.r = 237.0/255.0;
-            iter_arrow.color.g = 227.0/255.0;
-            iter_arrow.color.b = 231.0/255.0;
-            iter_arrow.points.push_back(start3);
-            iter_arrow.points.push_back(end3);
-            iter_msg.markers.emplace_back(iter_arrow);
-
-            geometry_msgs::Point end4;
-            end4.x = pos.x() + sin(pitch) * 0.15;
-            end4.y = pos.y();
-            end4.z = iter_ellipsoid.pose.position.z + cos(pitch) * 0.15;
-            iter_arrow1.id = 2;
-            iter_arrow1.color.r = iter_arrow.color.r;
-            iter_arrow1.color.g = iter_arrow.color.g;
-            iter_arrow1.color.b = iter_arrow.color.b;
-            iter_arrow1.points.push_back(start3);
-            iter_arrow1.points.push_back(end4);
-            iter_msg.markers.emplace_back(iter_arrow1); 
-
-            visualization_msgs::Marker plane;
-            plane.type = visualization_msgs::Marker::LINE_STRIP;
-            plane.header.frame_id = "world";
-            plane.action = visualization_msgs::Marker::ADD;
-            plane.pose.orientation.w = 1.0;
-            plane.scale.x = 0.005;
-            plane.color.a = 1.0;
-            plane.id = 3;
-            plane.color.r = pt_yellow(0)/255.0;
-            plane.color.g = pt_yellow(1)/255.0;
-            plane.color.b = pt_yellow(2)/255.0;
-            geometry_msgs::Point corner;
-            corner.x = pos.x() - 0.25 * cos(pitch);
-            corner.y = pos.y() - 0.15;
-            corner.z = iter_ellipsoid.pose.position.z + 0.25 * sin(pitch);
-            plane.points.push_back(corner); 
-            corner.x = pos.x() + 0.25 * cos(pitch);
-            corner.y = pos.y() - 0.15;
-            corner.z = iter_ellipsoid.pose.position.z - 0.25 * sin(pitch);
-            plane.points.push_back(corner);
-            corner.x = pos.x() + 0.25 * cos(pitch);
-            corner.y = pos.y() + 0.15;
-            corner.z = iter_ellipsoid.pose.position.z - 0.25 * sin(pitch);
-            plane.points.push_back(corner);
-            corner.x = pos.x() - 0.25 * cos(pitch);
-            corner.y = pos.y() + 0.15;
-            corner.z = iter_ellipsoid.pose.position.z + 0.25 * sin(pitch);
-            plane.points.push_back(corner);
-            corner.x = pos.x() - 0.25 * cos(pitch);
-            corner.y = pos.y() - 0.15;
-            corner.z = iter_ellipsoid.pose.position.z + 0.25 * sin(pitch);
-            plane.points.push_back(corner); 
-            iter_msg.markers.emplace_back(plane); 
-        }
         map_ready = true;
     }
 
@@ -882,7 +478,6 @@ namespace uneven_planner
         const Eigen::Vector3d ellipsoid_vecinv(1.0 / ellipsoid_x, 1.0 / ellipsoid_y, 1.0 / ellipsoid_z);
         int cnt=0;
         double minpt_size = 10000;
-        double maxpt_size =0;
 
         for (int x=0; x<voxel_num[0]; x++)
             for (int y=0; y<voxel_num[1]; y++)
@@ -935,9 +530,9 @@ namespace uneven_planner
                         {
                             RXS2 rxs2_z;
                             rxs2_z.z = 0;
-                            rxs2_z.assess(2) = 1.001;
+                            rxs2_z.assess(2) = 0.01;
                             double slope = 0.0;
-                            rxs2_z.sigma = lamda.dot(Eigen::Vector4d(rxs2_z.assess(0),rxs2_z.assess(1),rxs2_z.assess(2),slope));
+                            rxs2_z.sigma = 0.0;
                             map_buffer[toAddress(x, y, yaw)] = rxs2_z;
                             c_buffer[toAddress(x, y, yaw)] = map_buffer[toAddress(x, y, yaw)].getC();
                             continue;
@@ -964,18 +559,13 @@ namespace uneven_planner
                                 }
                             }
                         }
-                        if(iter==1)
-                        {
-                            minpt_size = (points.size()<=minpt_size) ? points.size() : minpt_size;
-                            maxpt_size = (points.size()>=maxpt_size) ? points.size() : maxpt_size;
-                        }
                         if (points.empty())
                         {
                             RXS2 rxs2_z;
                             rxs2_z.z = world_pos(2);
-                            rxs2_z.assess(2) = 1.001;
-                            double slope = 2.0 * acos(rxs2_z.getC())/M_PI;
-                            rxs2_z.sigma = lamda.dot(Eigen::Vector4d(rxs2_z.assess(0),rxs2_z.assess(1),rxs2_z.assess(2),slope));
+                            rxs2_z.assess(2) = 0.01;
+                            double slope = 0.0;
+                            rxs2_z.sigma = 0.0;
                             map_buffer[toAddress(x, y, yaw)] = rxs2_z;
                             c_buffer[toAddress(x, y, yaw)] = map_buffer[toAddress(x, y, yaw)].getC();
                         }
@@ -995,8 +585,7 @@ namespace uneven_planner
                             std::cout<<"\033[1;33m map process "<<toAddress(x, y, yaw)*100.0 / (voxel_num[0]*voxel_num[1]*voxel_num[2])<<"%\033[0m"<<std::endl;
                             cnt=1;
                         }
-                    }
-        std::cout << "maxpt_size:" << maxpt_size << " minpt_size:" << minpt_size << std::endl;          
+                    }        
         
         // to txt
         ofstream outf;
@@ -1026,14 +615,8 @@ namespace uneven_planner
         if (!map_ready)
             return;
         
-        origin_pub.publish(origin_cloud_msg);
-        filtered_pub.publish(filtered_cloud_msg);
-        collision_pub.publish(collision_cloud_msg);
-        if(show_zbso2)
-        {
-            zb_pub.publish(zb_msg);
-            so2_test_pub.publish(so2_test_msg);
-            iter_pub.publish(iter_msg);
-        }
+        //origin_pub.publish(origin_cloud_msg);
+        //filtered_pub.publish(filtered_cloud_msg);
+        //collision_pub.publish(collision_cloud_msg);
     }
 }

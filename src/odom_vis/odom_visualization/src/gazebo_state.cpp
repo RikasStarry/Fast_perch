@@ -20,6 +20,7 @@ using namespace std;
 ros::Subscriber sub_gazebo_state;
 ros::Publisher pub_gazebo_path;
 ros::Publisher pub_gazebo_odom;
+ros::Timer exec_timer;
 nav_msgs::Odometry odom;
 nav_msgs::Path path;
 geometry_msgs::PoseStamped pose;
@@ -65,6 +66,11 @@ void gazebo_state_cb(const gazebo_msgs::ModelStates::ConstPtr& msg)
     
 }
 
+void execCallback(const ros::TimerEvent &e)
+{
+    pub_gazebo_path.publish(path);
+}
+
 int main(int argc, char** argv)
 {
     ros::init(argc, argv, "gazebo_state");
@@ -74,6 +80,7 @@ int main(int argc, char** argv)
         nh.subscribe<gazebo_msgs::ModelStates>("/gazebo/model_states", 1, gazebo_state_cb);
     pub_gazebo_path = nh.advertise<nav_msgs::Path>("/gazebo_path", 10);
     pub_gazebo_odom = nh.advertise<nav_msgs::Odometry>("/gazebo_odom", 200);
+    exec_timer = nh.createTimer(ros::Duration(1), execCallback);
 
     // 默认参数为地面，gazebo仿真肯定会有地面模型，避免报错
     nh.param<string>("model_name", model_name, "ground_plane");
@@ -84,13 +91,11 @@ int main(int argc, char** argv)
     counts = 0;
     model_index = 0;
 
-    ros::Rate rate(100);
+    ros::Rate rate(200);
     while (ros::ok())
     {
-        ros::spinOnce();
-        pub_gazebo_path.publish(path);
+        ros::spinOnce();  
         pub_gazebo_odom.publish(odom);
-
         rate.sleep();
     }
     return 0;

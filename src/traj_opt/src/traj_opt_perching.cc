@@ -491,7 +491,7 @@ bool TrajOpt::generate_traj(const Eigen::MatrixXd& iniState,
       // outFile.close();
       //
       std::cout << "end pt is " << mincoOpt_.getTraj().getPos(total_time)<< std::endl;
-      visPtr_->visualize_traj(mincoOpt_.getTraj(), "smooth_traj");
+      //visPtr_->visualize_traj(mincoOpt_.getTraj(), "smooth_traj");
       
       // while(true)
       // {

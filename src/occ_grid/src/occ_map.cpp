@@ -151,6 +151,10 @@ namespace env
     ros::Time t1 = ros::Time::now();
     ros::Duration diff=(t1-t0);
     std::cout<<"Process grid map cost "<<diff.toSec()<<" s"<<std::endl;
+
+    sensor_msgs::PointCloud2 cloud_msg;
+    pcl::toROSMsg(*glb_inf_cloud_ptr_, cloud_msg);
+    glb_occ_inf_pub_.publish(cloud_msg);
   }
 
   void OccMap::init(const ros::NodeHandle &nh)
@@ -209,8 +213,8 @@ namespace env
     //     this->setOccupancy(Eigen::Vector3d(cx, cy, min_range_[2] + resolution_ / 2));
     //   }
 
-    global_occ_vis_timer_ = node_.createTimer(ros::Duration(5), &OccMap::globalOccVisCallback, this);
-    global_inf_occ_vis_timer_ = node_.createTimer(ros::Duration(5), &OccMap::globalInfOccVisCallback, this);
+    //global_occ_vis_timer_ = node_.createTimer(ros::Duration(5), &OccMap::globalOccVisCallback, this);
+    //global_inf_occ_vis_timer_ = node_.createTimer(ros::Duration(5), &OccMap::globalInfOccVisCallback, this);
     global_cloud_sub_ = node_.subscribe<sensor_msgs::PointCloud2>("/global_cloud", 1, &OccMap::globalCloudCallback, this);
     glb_occ_pub_ = node_.advertise<sensor_msgs::PointCloud2>("/occ_map/glb_map", 1);
     glb_occ_inf_pub_ = node_.advertise<sensor_msgs::PointCloud2>("/occ_map/glb_inf_map", 1);

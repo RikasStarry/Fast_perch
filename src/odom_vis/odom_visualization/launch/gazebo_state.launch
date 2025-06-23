@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <launch>
-    <node pkg="odom_visualization" type="gazebo_state" name="gazebo_state" output="screen">
+    <!--node pkg="odom_visualization" type="gazebo_state" name="gazebo_state" output="screen">
         <param name="model_name" value="iris"/>
         <param name="model_frame" value="base_link"/>
         <param name="target_frame" value="world"/>
-    </node>
+    </node-->
+    <node name="gazebo_state" pkg="odom_visualization" type="odom_pub.py" respawn="true" output="screen"/>
 </launch>

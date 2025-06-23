@@ -69,7 +69,7 @@ namespace PF
 
     void TesterPathFinder::calInitPath()
     {
-        start_<<-4.0,-4.0,2.0;
+        //start_<<-4.0,-4.0,2.0;
         vis_ptr_->visualize_a_ball(start_, 0.1, "start", visualization::Color::pink);
         vis_ptr_->visualize_a_ball(upper_goal, 0.1, "goal", visualization::Color::steelblue);
 
@@ -176,7 +176,7 @@ namespace PF
         v.clear();
 
         std::ifstream inFile;
-        inFile.open("/home/gnij/Fast-Perching-master/bag/union/land/snap.txt");
+        inFile.open("/home/gnij/Fast-Perching-master/bag/real/kino.txt");
         if (!inFile.is_open()) {
             std::cerr << "无法打开文件进行读取。\n";
             return;

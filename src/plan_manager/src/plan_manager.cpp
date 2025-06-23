@@ -50,12 +50,12 @@ void PlanManager::debug_timer_callback(const ros::TimerEvent& event) {
   Eigen::Quaterniond land_q(1, 0, 0, 0);
 
   iniState.setZero();
-  // iniState.col(0).x() = odom_pose.x();
-  // iniState.col(0).y() = odom_pose.y();
-  // iniState.col(0).z() = odom_pose.z();
-  iniState.col(0).x() = -4.0;
-  iniState.col(0).y() = -4.0;
-  iniState.col(0).z() = 2.0;
+  iniState.col(0).x() = odom_pose.x();
+  iniState.col(0).y() = odom_pose.y();
+  iniState.col(0).z() = odom_pose.z();
+  // iniState.col(0).x() = -4.0;
+  // iniState.col(0).y() = -4.0;
+  // iniState.col(0).z() = 2.0;
   iniState.col(1) = odom_lin;//2,0,0
   target_p = goal_;
   target_v = Eigen::Vector3d::Zero();
@@ -148,15 +148,15 @@ void PlanManager::debug_timer_callback(const ros::TimerEvent& event) {
   int N = 10;
 
   // std::ofstream outFile;
-  // outFile.open("/home/gnij/Fast-Perching-master/bag/union/perch2.txt",std::ios_base::app);
+  // outFile.open("/home/gnij/Fast-Perching-master/bag/real/kino.txt",std::ios_base::app);
   // if (!outFile.is_open()) {
   //     std::cerr << "无法打开文件进行写入。\n";
   //     return ;
   // }
-  // for (int i = 0; i <= N; ++i) {
+  // for (int i = 0; i <= 20; ++i) {
   //   double total_t = trajOptPtr_->snap_traj.getTotalDuration();
-  //   Eigen::Vector3d temp_pos = trajOptPtr_->snap_traj.getPos(double(i)/(N) * total_t);
-    
+  //   Eigen::Vector3d temp_pos = trajOptPtr_->snap_traj.getPos(double(i)/(20) * total_t);
+  //   outFile << temp_pos.x() << ' ' << temp_pos.y() << ' ' << temp_pos.z() << '\n';
   // }
   // outFile.close();
 
@@ -186,13 +186,14 @@ void PlanManager::debug_timer_callback(const ros::TimerEvent& event) {
 
   generate_new_traj_success = trajOptPtr_->generate_traj(iniState, target_p, target_v, land_q, N, traj);
   if (generate_new_traj_success) {
-    //visPtr_->visualize_traj(traj, "traj");
+    visPtr_->visualize_traj(traj, "traj");
     land_traj = traj;
     //land_traj = trajOptPtr_->snap_traj;
     has_traj = true;
-    Eigen::Vector3d tail_pos = land_traj.getPos(land_traj.getTotalDuration());
-    Eigen::Vector3d tail_vel = land_traj.getVel(land_traj.getTotalDuration());
-    visPtr_->visualize_arrow(tail_pos, tail_pos + 0.5 * land_traj.getVel(land_traj.getTotalDuration()), "tail_vel");
+    //Eigen::Vector3d tail_pos = land_traj.getPos(land_traj.getTotalDuration());
+    //Eigen::Vector3d tail_vel = land_traj.getVel(land_traj.getTotalDuration());
+    //visPtr_->visualize_arrow(tail_pos, tail_pos + 0.5 * land_traj.getVel(land_traj.getTotalDuration()), "tail_vel");
+    //visPtr_->visualize_traj(land_traj, "traj");
     traj_utils::PolyTraj poly_msg;
     polyTraj2ROSMsg(poly_msg,land_traj);
     traj_pub.publish(poly_msg);
@@ -403,9 +404,9 @@ void PlanManager::visTrajCallback(const ros::TimerEvent &e)
   if(!has_traj)
     return ;
   visPtr_->visualize_traj(land_traj, "traj");
-  Eigen::Vector3d tail_pos = land_traj.getPos(land_traj.getTotalDuration());
-  Eigen::Vector3d tail_vel = land_traj.getVel(land_traj.getTotalDuration());
-  visPtr_->visualize_arrow(tail_pos, tail_pos + 0.5 * land_traj.getVel(land_traj.getTotalDuration()), "tail_vel");
+  // Eigen::Vector3d tail_pos = land_traj.getPos(land_traj.getTotalDuration());
+  // Eigen::Vector3d tail_vel = land_traj.getVel(land_traj.getTotalDuration());
+  // visPtr_->visualize_arrow(tail_pos, tail_pos + 0.5 * land_traj.getVel(land_traj.getTotalDuration()), "tail_vel");
 }
 
 int PlanManager::Factorial(int x) {

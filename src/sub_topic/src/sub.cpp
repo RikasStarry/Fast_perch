@@ -17,7 +17,7 @@ namespace SUB{
 
     void subt::rcvOdomCallBack(const nav_msgs::Odometry::ConstPtr& msg) {//全部是惯性坐标系
         std::ofstream odom_file;
-        odom_file.open("/home/gnij/Fast-Perching-master/src/sub_topic/txt/union/odom.txt", std::ios_base::app);
+        odom_file.open("/home/gnij/Fast-Perching-master/src/sub_topic/txt/real/land/odom.txt", std::ios_base::app);
         if(odom_file.is_open())
         {   
             auto pos = msg->pose.pose.position;
@@ -51,7 +51,7 @@ namespace SUB{
     void subt::imu1Callback(const sensor_msgs::ImuConstPtr& msg)//全部是机体坐标系
     {
         std::ofstream imu1_file;
-        imu1_file.open("/home/gnij/Fast-Perching-master/src/sub_topic/txt/union/imu1.txt", std::ios_base::app);
+        imu1_file.open("/home/gnij/Fast-Perching-master/src/sub_topic/txt/real/land/imu1.txt", std::ios_base::app);
         if(imu1_file.is_open())
         {   
             if(!imu1_init_valid)
@@ -67,7 +67,16 @@ namespace SUB{
             auto acc = msg->linear_acceleration;
             auto omega = msg->angular_velocity;
             imu1_file << omega.x<<" "<< omega.y<<" "<<omega.z<<" ";
-            imu1_file << acc.x<<" "<< acc.y<<" "<< acc.z<<"\n";
+            imu1_file << acc.x<<" "<< acc.y<<" "<< acc.z<<" ";
+
+            Eigen::Quaterniond q(msg->orientation.w, msg->orientation.x,msg->orientation.y,msg->orientation.z);
+            q.normalize();
+            Eigen::Matrix3d m = q.toRotationMatrix();
+            double yaw = atan2(m(1,0), m(0,0));  
+            double pitch = asin(-m(2,0));     
+            double roll = atan2(m(2,1), m(2,2)); 
+            imu1_file << yaw <<" "<< pitch <<" "<< roll <<"\n";
+
             imu1_file.close();
         }
         else
@@ -79,7 +88,7 @@ namespace SUB{
     void subt::imu2Callback(const sensor_msgs::ImuConstPtr& msg)
     {
         std::ofstream imu2_file;
-        imu2_file.open("/home/gnij/Fast-Perching-master/src/sub_topic/txt/union/imu2.txt", std::ios_base::app);
+        imu2_file.open("/home/gnij/Fast-Perching-master/src/sub_topic/txt/real/land/imu2.txt", std::ios_base::app);
         if(imu2_file.is_open())
         {   
             if(!imu2_init_valid)
@@ -95,7 +104,16 @@ namespace SUB{
             auto acc = msg->linear_acceleration;
             auto omega = msg->angular_velocity;
             imu2_file << omega.x<<" "<< omega.y<<" "<<omega.z<<" ";
-            imu2_file << acc.x<<" "<< acc.y<<" "<< acc.z<<"\n";
+            imu2_file << acc.x<<" "<< acc.y<<" "<< acc.z<<" ";
+
+            Eigen::Quaterniond q(msg->orientation.w, msg->orientation.x,msg->orientation.y,msg->orientation.z);
+            q.normalize();
+            Eigen::Matrix3d m = q.toRotationMatrix();
+            double yaw = atan2(m(1,0), m(0,0));  
+            double pitch = asin(-m(2,0));     
+            double roll = atan2(m(2,1), m(2,2)); 
+            imu2_file << yaw <<" "<< pitch <<" "<< roll <<"\n";
+
             imu2_file.close();
         }
         else
@@ -109,7 +127,7 @@ namespace SUB{
         if(traj1_init_valid)
             return;
         std::ofstream traj1_file;
-        traj1_file.open("/home/gnij/Fast-Perching-master/src/sub_topic/txt/union/traj1.txt", std::ios_base::app);
+        traj1_file.open("/home/gnij/Fast-Perching-master/src/sub_topic/txt/real/land/traj1.txt", std::ios_base::app);
         if(traj1_file.is_open())
         {   
             for(int i=0;i<msg->poses.size();i++)
@@ -131,7 +149,7 @@ namespace SUB{
         if(traj2_init_valid)
             return;
         std::ofstream traj2_file;
-        traj2_file.open("/home/gnij/Fast-Perching-master/src/sub_topic/txt/union/traj2.txt", std::ios_base::app);
+        traj2_file.open("/home/gnij/Fast-Perching-master/src/sub_topic/txt/real/land/traj2.txt", std::ios_base::app);
         if(traj2_file.is_open())
         {   
             for(int i=0;i<msg->poses.size();i++)
